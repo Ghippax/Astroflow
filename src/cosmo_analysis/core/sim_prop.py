@@ -1,3 +1,4 @@
+from .. import log
 from ..core import utils
 from ..io   import load
 import numpy as np
@@ -79,8 +80,8 @@ def findCenter6(sim, snapshotN):
 def findCenter7(sim, idx):
     snap     = sim.ytFull[idx]
     projPath = "/sqfs/work/hp240141/z6b616/cosmo_analysis/outputlist_projection.txt" # TODO: Do this correctly
-    print("Working?")
-    print(projPath)
+    log.logger.debug("Is this working?")
+    log.logger.debug(projPath)
 
     f        = np.loadtxt(projPath,skiprows=4)
     idx0     = utils.getClosestIdx(f[:,0],0.99999) # Finds end of first projection
@@ -101,6 +102,27 @@ def findCenter7(sim, idx):
     center   = center.to("code_length")
 
     cen1     = np.array([center[0].d,center[1].d,center[2].d]) 
+
+    return   (cen1,center)
+
+# Centering calc8 (like 4, for any box)
+def findCenter8(sim, idx):
+    snap     = sim.ytFull[idx]
+
+    boxSize = snap.parameters['BoxSize']
+    
+    cen1     = np.array([boxSize/2,boxSize/2,boxSize/2]) # In code units
+    center   = snap.arr([cen1[0], cen1[1], cen1[2]],'code_length')
+
+    itNumber   = 8
+    sizeSphere = np.logspace(np.log10(boxSize),np.log10(boxSize*0.0001),itNumber)
+
+    for i in range(itNumber):
+        sp = snap.sphere(center, (sizeSphere[i],'code_length'))
+        center   = sp.quantities.center_of_mass(use_gas=False,use_particles=True)
+
+    center   = center.to("code_length")
+    cen1     = np.array([center[0].d,center[1].d,center[2].d])
 
     return   (cen1,center)
 
@@ -133,8 +155,7 @@ def getVirRho(co,z):
 
 # Calculates the virial radius at present redshift via multiple methods
 def getRvir(sim,idx,method="Vir",rvirlim=500):
-    # TODO: fix log
-    #f.write(f"    Initiating virial radius finder for snapshot at {idx} using method {method} and limited by {rvirlim}\n")
+    log.logger.info(f"    Initiating virial radius finder for snapshot at {idx} using method {method} and limited by {rvirlim}")
     co = yt.utilities.cosmology.Cosmology(hubble_constant=0.702, omega_matter=0.272,omega_lambda=0.728, omega_curvature=0.0)
     methodDict = {"Crit":getCritRho200,"Mean":getMeanRho200,"Vir":getVirRho}
     snapshot   = sim.ytFull[idx]
@@ -144,8 +165,7 @@ def getRvir(sim,idx,method="Vir",rvirlim=500):
     allR       = load.getData(sp, "particle_position_spherical_radius", sim.snap[idx].pType, units = "kpc")
     #allMass    = sp[("all","particle_mass")].in_units("Msun")
     #allR       = sp[("all","particle_position_spherical_radius")].in_units("kpc")
-    # TODO: fix log
-    #f.write(f"    Sorting particles by radius...\n")
+    log.logger.info(f"    Sorting particles by radius...")
     idx   = np.argsort(allR)
     mSort = np.array(allMass)[idx]
     rSort = np.array(allR)[idx]
@@ -153,15 +173,14 @@ def getRvir(sim,idx,method="Vir",rvirlim=500):
     denR  = cumM/(4/3*np.pi*rSort**3) 
 
     idxAtVir = np.argmin(np.abs(denR-targetDen))
-    # TODO: fix log
-    #f.write(f"    Found rvir: {rSort[idxAtVir]:.3f} enclosing {cumM[idxAtVir]:.3E} Msun, with predicted {targetDen*(4/3*np.pi*rSort[idxAtVir]**3):.3E}\n")
+    log.logger.info(f"    Found rvir: {rSort[idxAtVir]:.3f} enclosing {cumM[idxAtVir]:.3E} Msun, with predicted {targetDen*(4/3*np.pi*rSort[idxAtVir]**3):.3E}")
     return rSort[idxAtVir]
 
 # TODO: Experimental, need to check if faces detected are good
 # TODO: Do full halo recognisition, requiring integration with Rockstar or Haskap Pie
 # Calculates edge_on and face_on vectors from the total angular momentum
 def getAxes(sim,idx,rvirRatio=0.15):
-    print(f"    Calculating face-on axis for snapshot at {idx} limited by sphere of radius {rvirRatio*sim.snap[idx].rvir} kpc")
+    log.logger.info(f"    Calculating face-on axis for snapshot at {idx} limited by sphere of radius {rvirRatio*sim.snap[idx].rvir} kpc")
     # Selects a well centered sphere upto rvirRatio*rvir (defaults to the 0.15 used in AGORA Paper VIII)
     sp = sim.ytFull[idx].sphere(sim.snap[idx].ytcen,(sim.snap[idx].rvir*rvirRatio,"kpc"))
     # Gets the total angular momentum from the gas or star particles
@@ -178,6 +197,6 @@ def getAxes(sim,idx,rvirRatio=0.15):
     # Calculate cross to get edge_on vector
     edge_on = np.cross(face_on, z0)
     edge_on /= np.linalg.norm(edge_on)
-    print(f"    Calculated face-on axis {face_on} and edge-on axis {edge_on}")
+    log.logger.info(f"    Calculated face-on axis {face_on} and edge-on axis {edge_on}")
 
     return (face_on,edge_on)

@@ -21,11 +21,10 @@ from   PIL import Image
 from ..core.constants import *
 from ..core.utils     import *
 from ..io.load        import *
+from .. import log
 
 yt.set_log_level(0)
-
-# TODO: Fix this path
-savePath = "autoAnalysisFigures"
+savePath = "/sqfs/work/hp240141/z6b616/analysis"
 
 # PLOTTING MACRO FUNCTIONS (rerun whenever config options are changed for new defaults)
 # Return the frame for an animation
@@ -34,7 +33,7 @@ def saveFrame(figure,verbose):
     figure.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
     buf.seek(0)
     img = np.array(Image.open(buf))
-    #if verbose > 8: f.write(f"  Figure saved to buffer\n")
+    log.logger.debug("Figure saved to buffer")
     buf.close()
     plt.close(figure)
     return img
@@ -49,7 +48,7 @@ def setLegend(uAx,sims,idx):
 def handleFig(figure, switches, message, saveFigPath, verbose):
     # Shows figure
     if switches[0]:
-        #if verbose > 10: f.write(f"  Showing to screen\n")
+        log.logger.debug("Showing to screen")
         plt.show()
 
     # Return the frame for an animation
@@ -61,11 +60,11 @@ def handleFig(figure, switches, message, saveFigPath, verbose):
         fullPath = os.path.join(savePath,"placeholder.png")
         if message != 0:
             fullPath = os.path.join(savePath,message.replace(" ","_")+".png")
-        #elif saveFigPath == 0:
-            #if verbose > 3: f.write(f"WARNING: TITLE NOT SPECIFIED FOR THIS FIGURE, PLEASE SPECIFY A TITLE\n")
+        elif saveFigPath == 0:
+            log.logger.warning("TITLE NOT SPECIFIED FOR THIS FIGURE, PLEASE SPECIFY A TITLE")
 
         if saveFigPath != 0: fullPath = os.path.join(saveFigPath,message.replace(" ","_")+".png")
-        #if verbose > 8: f.write(f"  Saving figure to {fullPath}\n")
+        log.logger.info(f"  Saving figure to {fullPath}")
         figure.savefig(fullPath, bbox_inches='tight', pad_inches=0.03, dpi=300)
         plt.close(figure)
 
@@ -74,7 +73,7 @@ def ytMultiPanel(sims, idx, zField = ["Density"], axisProj = 0, part = gasPart, 
                 flipOrder=0,
                 verbose=verboseLevel, plotSize=ytFigSize, saveFig=saveAll, saveFigPath=0, showFig=showAll, message=0, fsize=fontSize, animate=0):
         
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Option setup
     numP = len(zField)
     numS = len(sims)
@@ -108,12 +107,12 @@ def ytMultiPanel(sims, idx, zField = ["Density"], axisProj = 0, part = gasPart, 
     titleArr = [sims[i].name           for i in range(numS)]
 
     for i,snap in enumerate(snapArr):
-        #if verbose > 9: f.write(f"  - Projecting {sims[i].name} Time {sims[i].snap[idx[i]].time:.1f} Redshift {sims[i].snap[idx[i]].z:.2f} Axis {axisProj[i]}\n")
+        log.logger.info(f"  - Projecting {sims[i].name} Time {sims[i].snap[idx[i]].time:.1f} Redshift {sims[i].snap[idx[i]].z:.2f} Axis {axisProj[i]}")
         for j,pField in enumerate(zField):
             iterRow, iterCol = (j,i)
             if flipOrder: iterRow, iterCol = (i,j)
 
-            #if verbose > 10: f.write(f"    Projecting field {pField} Particle {part[j]} Weight {wField[j]} Width {zWidth[j]} Unit {zFieldUnit[j]} Lim {zFieldLim[j]}\n")
+            log.logger.debug(f"    Projecting field {pField} Particle {part[j]} Weight {wField[j]} Width {zWidth[j]} Unit {zFieldUnit[j]} Lim {zFieldLim[j]}")
             # Setup projection of pField of snap
             if takeLog[j] == 0: snap.field_info[(part[j], pField)].take_log = False
             if wField[j] != 0:
@@ -138,7 +137,7 @@ def ytMultiPanel(sims, idx, zField = ["Density"], axisProj = 0, part = gasPart, 
             fullPlot.cax = panelGrid.cbar_axes[iterRow]
             if flipOrder: fullPlot.cax = panelGrid.cbar_axes[iterCol]
 
-            #if verbose > 11: f.write(f"    Rendering\n")
+            log.logger.debug("    Rendering")
             fig1._setup_plots()
 
             if ((not flipOrder) and iterRow == 0) or (flipOrder and iterCol == 0): 
@@ -153,7 +152,7 @@ def ytProjPanel(simArr, idxArr, verbose=verboseLevel, plotSize=ytFigSize, saveFi
                 zFieldUnit = "g/cm**2", cM = "algae",takeLog=1, zFieldLim = (1.5e-4,1e-1), zWidth=figWidth, fsize=fontSize,
                 wField=0, ovHalo=0, animate=0):
         
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Option setup
     axNum = 1
     if twoAxis: axNum = 2
@@ -168,12 +167,12 @@ def ytProjPanel(simArr, idxArr, verbose=verboseLevel, plotSize=ytFigSize, saveFi
     titleArr = [simArr[i].name              for i in range(len(simArr))]
 
     # Start of the fig making
-    #if verbose > 9: f.write(f"  Setup complete - Starting fig making for {zField}\n")
+    log.logger.info(f"  Setup complete - Starting fig making for {zField}")
     for i,snap in enumerate(snapArr):
-        #if verbose > 9: f.write(f"  - Projecting {simArr[i].name} at time {simArr[i].snap[idxArr[i]].time:.1f} Myr Redshift {simArr[i].snap[idxArr[i]].z:.2f}\n")
+        log.logger.info(f"  - Projecting {simArr[i].name} at time {simArr[i].snap[idxArr[i]].time:.1f} Myr Redshift {simArr[i].snap[idxArr[i]].z:.2f}")
 
         # Sets plotting options as detailed
-        #if verbose > 11: f.write(f"    Projecting in axis {axisProj[0]}\n")
+        log.logger.debug(f"    Projecting in axis {axisProj[0]}")
         if takeLog == 0: snap.field_info[(part, zField)].take_log = False
         if wField != 0:
             fig1 = yt.ProjectionPlot(snap, axisProj[0], (part, zField), window_size=plotSize, weight_field=(part,wField), fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen)
@@ -191,7 +190,7 @@ def ytProjPanel(simArr, idxArr, verbose=verboseLevel, plotSize=ytFigSize, saveFi
 
         # Plots a second axis if specified
         if twoAxis:
-            #if verbose > 11: f.write(f"    Projecting in axis {axisProj[1]}\n")
+            log.logger.debug(f"    Projecting in axis {axisProj[1]}")
             if wField != 0:
                 fig2 = yt.ProjectionPlot(snap, axisProj[1], (part, zField), window_size=plotSize, weight_field=(part,wField), fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen) 
             else:
@@ -208,7 +207,7 @@ def ytProjPanel(simArr, idxArr, verbose=verboseLevel, plotSize=ytFigSize, saveFi
             fig2.annotate_timestamp(redshift=True)
 
         # Transfers yt plot to plt axes and renders the figure
-        #if verbose > 11: f.write(f"    Rendering {simArr[i].name}\n")
+        log.logger.debug(f"    Rendering {simArr[i].name}")
         fullPlot = fig1.plots[part, zField]
         fullPlot.figure = panelFig
         fullPlot.axes = panelGrid[i].axes
@@ -225,16 +224,16 @@ def ytProjPanel(simArr, idxArr, verbose=verboseLevel, plotSize=ytFigSize, saveFi
 
         # Overplot halos if prompted to and passed
         if ovHalo != 0:
-            #if verbose > 10: f.write(f"    Overplotting halos\n")
+            log.logger.debug("    Overplotting halos")
             haloData = ovHalo[0][i].all_data()
             haloFilt = ovHalo[1]
-            #print(haloData['particle_position_x'][haloFilt[i]].in_units("kpc"))
-            #print(simArr[i].snap[idxArr[i]].center[0],simArr[i].snap[idxArr[i]].center[1],simArr[i].snap[idxArr[i]].center[2])
+            #log.logger.info(haloData['particle_position_x'][haloFilt[i]].in_units("kpc"))
+            #log.logger.info(simArr[i].snap[idxArr[i]].center[0],simArr[i].snap[idxArr[i]].center[1],simArr[i].snap[idxArr[i]].center[2])
             xc = np.array(haloData['particle_position_x'][haloFilt[i]].in_units("kpc"))-simArr[i].snap[idxArr[i]].center[0]/1e3
             yc = np.array(haloData['particle_position_y'][haloFilt[i]].in_units("kpc"))-simArr[i].snap[idxArr[i]].center[1]/1e3
             zc = np.array(haloData['particle_position_z'][haloFilt[i]].in_units("kpc"))-simArr[i].snap[idxArr[i]].center[2]/1e3
             rc = np.array(haloData['virial_radius'][haloFilt[i]].in_units("kpc"))*1e3
-            #print(xc,yc,zc,rc)
+            #log.logger.info(xc,yc,zc,rc)
             for j in range(len(xc)):
                 panelGrid.axes_all[i].add_patch(plt.Circle((xc[j],yc[j]),rc[j],ec="r",fc="none"))
                 
@@ -251,7 +250,7 @@ def ytPhasePanel(simArr, idxArr, depositionAlg="ngp", verbose=verboseLevel, plot
                  saveFigPath=0, showFig=showAll,message=0, blackLine=0, panOver=0, part = "PartType0", zLog=1,
                  zFields = ["Density","Temperature","Masses"], zFieldUnits = ["g/cm**3","K","Msun"], cM = "algae", animate = 0,
                  zFieldLim = (1e3,1e8,1e-29,1e-21,10,1e7), zWidth=15, fsize=12, wField=0, xb=300, yb=300, grid=True, axAspect = 1):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Panel fig setup
     if isinstance(wField,list) == False: wField = [wField]*len(simArr)
     if panOver == 0:
@@ -271,7 +270,7 @@ def ytPhasePanel(simArr, idxArr, depositionAlg="ngp", verbose=verboseLevel, plot
 
     # Getting the black line
     if blackLine:
-        #if verbose > 10: f.write(f"  Calculating avg profile with {simArr[0].name}\n")
+        log.logger.debug(f"  Calculating avg profile with {simArr[0].name}")
         sp = snapArr[0].sphere(simArr[0].snap[idxArr[0]].ytcen,(zWidth,"kpc"))
 
         p1 = yt.ProfilePlot(sp,(part,zFields[0]),(part,zFields[1]),weight_field=(part,zFields[2]), n_bins=30, x_log=False, accumulation=False)
@@ -294,7 +293,7 @@ def ytPhasePanel(simArr, idxArr, depositionAlg="ngp", verbose=verboseLevel, plot
            
     # Start of the fig making
     for i,snap in enumerate(snapArr):
-        #if verbose > 9: f.write(f"  - Plotting {simArr[i].name}\n")
+        log.logger.info(f"  - Plotting {simArr[i].name}")
         sp = snap.sphere(simArr[i].snap[idxArr[i]].ytcen,(zWidth,"kpc"))
         # Plot phase with specified parameters
         if zLog != 1:
@@ -323,7 +322,7 @@ def ytPhasePanel(simArr, idxArr, depositionAlg="ngp", verbose=verboseLevel, plot
         #fig1.annotate_text(0,0,"t="+str(round(sims[i].snap[idx[i]].time))+" Myr\n z="+str(round(sims[i].snap[idx[i]].z,2)))
 
         # Transfers yt plot to plt axes and renders the figure
-        #if verbose > 11: f.write(f"    Rendering {simArr[i].name}\n")
+        log.logger.debug(f"    Rendering {simArr[i].name}")
         fullPlot = fig1.plots[part, zFields[2]]
         fullPlot.figure = panelFig
         fullPlot.axes = panelGrid[i].axes
@@ -345,7 +344,7 @@ def ytPhasePanel(simArr, idxArr, depositionAlg="ngp", verbose=verboseLevel, plot
 # Plots a binned field
 def plotBinned(sims,idx,binFields,nBins,rLim,logOverload=0,legOverload=0,diffSims=0,blLine=0,wField=0,spLim=0,binFunction=0,part=gasPart,setUnits=0,setLogs=(False,True),ylims=0,xlims=0,animate=0,
                xylabels=0,plotTitle=0,errorLim=errorLimGlobal,message=0,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,saveFigPath=0,showFig=showAll,showError=showErrorGlobal,axAspect=1):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Initialize figures
     if showError == 1:
         if isinstance(plotSize,list) == False: plotSize = [plotSize,plotSize*1.2] 
@@ -367,7 +366,7 @@ def plotBinned(sims,idx,binFields,nBins,rLim,logOverload=0,legOverload=0,diffSim
     for k,sn in enumerate(sims):
 
         # Setting up parameters
-        #if verbose > 9: f.write(f"  Started {sn.name}\n")
+        log.logger.info(f"  Started {sn.name}")
         splimit = rLim[1]
         if spLim != 0: splimit = spLim
         weightField = None
@@ -423,7 +422,7 @@ def plotBinned(sims,idx,binFields,nBins,rLim,logOverload=0,legOverload=0,diffSim
         
     # Plots dispersion of codes
     if showError == 1:
-        #if verbose > 10: f.write(f"  Plotting dispersion\n")
+        log.logger.debug("  Plotting dispersion")
         allYbin = np.array(allYbin)
         error = [None]*nBins
         for i in range(nBins):
@@ -482,7 +481,7 @@ def plotBinned(sims,idx,binFields,nBins,rLim,logOverload=0,legOverload=0,diffSim
 
 # Calculates the velocity dispersion for a given particle type
 def plotRotDisp(sims,idx,nBins,rLim,part,titlePlot=0,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,saveFigPath=0,showFig=showAll,message=0,ylims=(0,170),animate=0):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     uFig = plt.figure(figsize=(plotSize, plotSize*1.5))
     uAx  = plt.subplot2grid((5,1),(0,0),rowspan=3)
     uAx2 = plt.subplot2grid((5,1),(3,0),rowspan=1)
@@ -560,7 +559,7 @@ def plotRotDisp(sims,idx,nBins,rLim,part,titlePlot=0,verbose=verboseLevel,plotSi
 
     for k,sn in enumerate(sims):
 
-        #if verbose > 9: f.write(f"  Started {sn.name}\n")
+        log.logger.info(f"  Started {sn.name}")
         sp = sims[k].ytFull[idx[k]].sphere(sims[k].snap[idx[k]].ytcen,(rLim,"kpc"))
         
         p1 = yt.ProfilePlot(sp,(part,"particle_position_cylindrical_radius"),(part,"particle_vel_disp"),weight_field=(part,"Masses"), n_bins=nBins, x_log=False)
@@ -584,7 +583,7 @@ def plotRotDisp(sims,idx,nBins,rLim,part,titlePlot=0,verbose=verboseLevel,plotSi
     
     allYbin = np.array(allYbin)
     error = [None]*nBins
-    #if verbose > 10: f.write(f"  Plotting dispersion\n")
+    log.logger.debug("  Plotting dispersion")
     for i in range(nBins):
         average = np.mean(allYbin[:,i])
         if average != 0:
@@ -600,7 +599,7 @@ def plotRotDisp(sims,idx,nBins,rLim,part,titlePlot=0,verbose=verboseLevel,plotSi
     uAx2.grid()
 	
     allYbinZ = np.array(allYbinZ)
-    #if verbose > 10: f.write(f"  Plotting dispersion ratio\n")
+    log.logger.debug("  Plotting dispersion ratio")
     for i in range(len(sims)):
         dispRatio = allYbinZ[i,:]/allYbin[i,:]
         uAx3.plot(XGlobal,dispRatio,".")
@@ -624,14 +623,14 @@ def plotRotDisp(sims,idx,nBins,rLim,part,titlePlot=0,verbose=verboseLevel,plotSi
 
 # CLUMP FINDING AND LOADING
 def findHalos(simArr, idxArr, partT, mainPath, haloMethod = "fof", hopThresh = 4e9, fofLink = 0.0012, hardLimits = True, overWrite = True, clumpLim  = (1e6,8e8), verbose = verboseLevel):
-    #if verbose > 8: f.write(f"\nInitiating halo finding for particle type: {partT} and Method: {haloMethod}\n") 
+    log.logger.info(f"\nInitiating halo finding for particle type: {partT} and Method: {haloMethod}") 
     # Initialize halo arrays
     haloSims = [None]*len(simArr)
     haloFilt = [None]*len(simArr)
     temp = None
     for i in range(len(simArr)):
         # Load parameters and paths
-        #if verbose > 9: f.write(f"  - Loading halos for {simArr[i].name}\n")
+        log.logger.info(f"  - Loading halos for {simArr[i].name}")
         snap = simArr[i].ytFull[idxArr[i]]
         haloDirSim = os.path.join("Halos","Halo_"+haloMethod+"_"+partT+"_"+simArr[i].name.replace(" ","_"))
         haloPath = os.path.join(mainPath,haloDirSim)
@@ -641,12 +640,12 @@ def findHalos(simArr, idxArr, partT, mainPath, haloMethod = "fof", hopThresh = 4
         # Do the halo finding if no halos detected
         if os.path.exists(haloDirPath) == False or overWrite:
             # Explain what files are being modified or not
-            #if os.path.exists(haloDirPath) == False:
-                #if verbose > 9: f.write(f"    No halos detected in {haloDirPath}\n")
-            #elif overWrite:
-                #if verbose > 9: f.write(f"    Overwriting halos detected in {haloDirPath}\n")
+            if os.path.exists(haloDirPath) == False:
+                log.logger.info(f"    No halos detected in {haloDirPath}")
+            elif overWrite:
+                log.logger.info(f"    Overwriting halos detected in {haloDirPath}")
             
-            #if verbose > 9: f.write(f"    Initializing halo finding to be saved in {haloFilePath}\n")
+            log.logger.info(f"    Initializing halo finding to be saved in {haloFilePath}")
             
             # Configure the halo catalog and halo finding method
             if      haloMethod == "hop":
@@ -694,7 +693,7 @@ def findHalos(simArr, idxArr, partT, mainPath, haloMethod = "fof", hopThresh = 4
         HaloDataset._parse_parameter_file = _parse_parameter_file_no_cosmo
 
         # Now load the halos from disk file
-        #if verbose > 9: f.write(f"    Loading halo from file{haloFilePath}\n")
+        log.logger.info(f"    Loading halo from file{haloFilePath}")
         halo_ds  = yt.load(haloFilePath)
         hc = yt.extensions.astro_analysis.halo_analysis.HaloCatalog(halos_ds=halo_ds)
         hc.load()
@@ -711,19 +710,19 @@ def findHalos(simArr, idxArr, partT, mainPath, haloMethod = "fof", hopThresh = 4
             # Find the indices of the halos to keep.
             haloFilt[i] = np.where(keep)[0]
         
-    #if verbose > 10: f.write(f"  Halo loading successful!\n")
+    log.logger.debug("  Halo loading successful!")
     return (haloSims,haloFilt)
 
 # Plots the cumulative mass function of a collection of halos
 def plotClumpMassF(sims,idx,haloData,nBins=20,mLim=(6,8.5),verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,saveFigPath=0,showFig=showAll,message=0,animate=0):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Setup plot figures and axes
     uFig = plt.figure(figsize=(plotSize, plotSize))
     uAx  = plt.subplot2grid((4,1),(0,0),rowspan=4)
 
     # Calculate the cumulative mass function for each snapshot
     for k,sn in enumerate(sims):
-        #if verbose > 9: f.write(f"  Started {sn.name}\n")
+        log.logger.info(f"  Started {sn.name}")
         temp = haloData[0][k].all_data()
         clumpMass = temp['particle_mass'][haloData[1][k]].in_units("Msun")
             
@@ -753,7 +752,7 @@ def aFromT(time, eps = 0.1):
 
 # Plot the total SFR of a simulation over time
 def plotSFR(sims,idx,nBins=25,tLimPreset = [0,0],verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,saveFigPath=0,showFig=showAll,message=0,yLims=[0,8],animate=0,xLims=0):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Setup plot figures and axes
     uFig = plt.figure(figsize=(figSize, figSize))
     uAx  = plt.subplot2grid((4,1),(0,0),rowspan=3)
@@ -764,7 +763,7 @@ def plotSFR(sims,idx,nBins=25,tLimPreset = [0,0],verbose=verboseLevel,plotSize=f
     XGlobal = None
     for k,sn in enumerate(sims):
         tLim = [tLimPreset[0],tLimPreset[1]]
-        #if verbose > 9: f.write(f"  Started {sims[k].name} with time {sn.snap[idx[k]].time}\n")
+        log.logger.info(f"  Started {sims[k].name} with time {sn.snap[idx[k]].time}")
         if tLimPreset[1] == 0: tLim[1] = sn.snap[idx[k]].time
 
         dt = (tLim[1]-tLim[0])/nBins
@@ -795,7 +794,7 @@ def plotSFR(sims,idx,nBins=25,tLimPreset = [0,0],verbose=verboseLevel,plotSize=f
                 sfr[binIdx]      += allStarMass[i]/(dt*1e6)
                 starMass[binIdx] += allStarMass[i]
             if i/len(allStarAge)*100-prog > 33:
-                #if verbose > 8: f.write(f"    {i/len(allStarAge)*100:.3f}%\n")
+                log.logger.debug(f"    {i/len(allStarAge)*100:.3f}%")
                 prog = i/len(allStarAge)*100
         
         for i in range(nBins):
@@ -836,13 +835,13 @@ def plotSFR(sims,idx,nBins=25,tLimPreset = [0,0],verbose=verboseLevel,plotSize=f
 
 # Plot the KS relation by binning cillindrically gas density and SFR
 def plotKScil(sims,idx,nBins=50,rLim=0.5*figWidth,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,saveFigPath=0,showFig=showAll,message=0,animate=0):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Setup plot figures and axes
     uFig = plt.figure(figsize=(plotSize, plotSize))
     uAx  = plt.subplot2grid((4,1),(0,0),rowspan=4)
 
     for k,sn in enumerate(sims):
-        #if verbose > 9: f.write(f"  Started {sims[k].name} with time {sn.snap[idx[k]].time}\n")
+        log.logger.info(f"  Started {sims[k].name} with time {sn.snap[idx[k]].time}")
         sp = sims[k].ytFull[idx[k]].sphere(sims[k].snap[idx[k]].ytcen,(rLim,"kpc"))
         
         # Calculate SFR den in cil bins
@@ -917,7 +916,7 @@ def plotKSmock(sims,idx,fsize=fontSize,rLim=0.5*figWidth,verbose=verboseLevel,pl
     zFieldLim2   = (3e-4, 3e-1)
 
     cmapDef = plt.get_cmap("tab10")
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
 
     # Setup plot figures and axes
     uFig = plt.figure(figsize=(plotSize, plotSize))
@@ -925,12 +924,12 @@ def plotKSmock(sims,idx,fsize=fontSize,rLim=0.5*figWidth,verbose=verboseLevel,pl
     nMockBins = int(rLim*2*1e3/resMock)
 
     for k,sn in enumerate(sims):
-        #if verbose > 9: f.write(f"  Started {sn.name}\n")
+        log.logger.info(f"  Started {sn.name}")
 
         sp = sims[k].ytFull[idx[k]].sphere(sims[k].snap[idx[k]].ytcen,(rLim,"kpc"))
         
         # Calculate SFR den in mock rectangular bins
-        #f.write(f"  Plotting {sims[k].name} in {axisProj} Time {sims[k].snap[idx[k]].time:.1f} Myr\n")
+        log.logger.info(f"  Plotting {sims[k].name} in {axisProj} Time {sims[k].snap[idx[k]].time:.1f} Myr")
         fig1 = yt.ParticlePhasePlot(sp,  (starPart, "x_centered"),(starPart, "y_centered"),(starPart, "sfr_den_low_res"), weight_field=None, deposition="cic", fontsize=fsize, x_bins=nMockBins, y_bins=nMockBins)
         fig1.set_zlim((starPart, "sfr_den_low_res"), zmin=zFieldLim2[0], zmax=zFieldLim2[1])
         fig1.set_xlim(-rLim,rLim)
@@ -961,7 +960,7 @@ def plotKSmock(sims,idx,fsize=fontSize,rLim=0.5*figWidth,verbose=verboseLevel,pl
             xi, yi = np.mgrid[xKS.min():xKS.max():Gaussian_density_estimation_nbins*1j, yKS.min():yKS.max():Gaussian_density_estimation_nbins*1j]
             zi = np.reshape(kernel(np.vstack([xi.flatten(), yi.flatten()])), xi.shape)
             uAx.contour(xi, yi, zi, np.array([0.2]), linewidths=1.5, colors=cmapDef(k))    # 80% percentile contour
-        #else: f.write(f"  Insufficent data points (xKS {len(xKS)} and yKS {len(yKS)}). Skipping contour\n")
+        else: log.logger.warning(f"  Insufficent data points (xKS {len(xKS)} and yKS {len(yKS)}). Skipping contour")
         
         setLegend(uAx,sims,idx)
 
@@ -993,7 +992,7 @@ def plotKSmock(sims,idx,fsize=fontSize,rLim=0.5*figWidth,verbose=verboseLevel,pl
 
 # Plot the total SFR of a simulation over time
 def plotSFmass(sims,idx,nBins=50,zLim = [0,0],verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,saveFigPath=0,showFig=showAll,message=0,yLims=[5e6,5e9],xLims=0,splimit=100,animate=0):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Setup plot figures and axes
     uFig = plt.figure(figsize=(8/10*figSize, 6/10*figSize))
     uAx  = plt.subplot2grid((4,1),(0,0),rowspan=4)
@@ -1002,7 +1001,7 @@ def plotSFmass(sims,idx,nBins=50,zLim = [0,0],verbose=verboseLevel,plotSize=figS
 
     # Bin star ages into nBins and use that to estimate total mass
     for k,sn in enumerate(sims):
-        #if verbose > 9: f.write(f"  Started {sims[k].name} with time {sn.snap[idx[k]].time:.1f}\n")
+        log.logger.info(f"  Started {sims[k].name} with time {sn.snap[idx[k]].time:.1f}")
         # Maybe limit to rvir?
         sp = sims[k].ytFull[idx[k]].sphere(sims[k].snap[idx[k]].ytcen,(splimit,"kpc"))
         # Gets limits from current snapshot and earliest recorded star
@@ -1044,7 +1043,7 @@ def plotSFmass(sims,idx,nBins=50,zLim = [0,0],verbose=verboseLevel,plotSize=figS
 
 # Plot the Ms/M200 ratio over time
 def plotMsMh(sims,idx,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,saveFigPath=0,showFig=showAll,message=0,yLims=[1e-5,0.25],xLims=0,animate=0):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Setup plot figures and axes
     uFig = plt.figure(figsize=(8/10*figSize, 6/10*figSize))
     uAx  = plt.subplot2grid((4,1),(0,0),rowspan=4)
@@ -1063,7 +1062,7 @@ def plotMsMh(sims,idx,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,save
 
     # Bin star ages into nBins and use that to estimate total mass
     for k,sn in enumerate(sims):
-        #if verbose > 9: f.write(f"  Started {sims[k].name}\n")
+        log.logger.info(f"  Started {sims[k].name}")
  
         Mstar = [0]*len(idx[k])
         Mhalo = [0]*len(idx[k])
@@ -1077,13 +1076,13 @@ def plotMsMh(sims,idx,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,save
             index     = np.argmin(np.abs(np.array(z_fix)-curSnap.z))
             # Uses the mean rvir if z is sufficiently close
             if np.abs(z_fix[index]-curSnap.z) < 0.2:
-                #f.write(f"  Using the mean rvir from AGORA data, z for this snapshot is sufficiently close (dif < 0.2)\n")
+                log.logger.info("  Using the mean rvir from AGORA data, z for this snapshot is sufficiently close (dif < 0.2)")
                 curRvir   = rvir_fix[index]
             else:
-                #f.write(f"  Using the rvir calculated from the snapshot\n")
+                log.logger.info("  Using the rvir calculated from the snapshot")
                 curRvir   = sims[k].snap[idx[k][i]].rvir
-            #if verbose > 10: f.write(f"  - Snapshot {idx[k][i]} with t = {curSnap.time:.1f} z = {curSnap.z:.2f}\n")
-            #if verbose > 11: f.write(f"      Mapped to z = {z_fix[index]:.2f} rvir = {curRvir:.2f}\n")
+            log.logger.debug(f"  - Snapshot {idx[k][i]} with t = {curSnap.time:.1f} z = {curSnap.z:.2f}")
+            log.logger.debug(f"      Mapped to z = {z_fix[index]:.2f} rvir = {curRvir:.2f}")
 
             # Get the stellar halo and halo cutoff and calculate the total mass at this redshift
             spGal = curYTSnap.sphere(curSnap.ytcen,(0.15*curRvir, "kpc"))
@@ -1093,12 +1092,12 @@ def plotMsMh(sims,idx,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,save
             if starPart in sims[k].snap[idx[k][i]].pType:
                 Mstar[i] = spGal[(starPart,"particle_mass")].in_units("Msun").sum()
             else:
-                #f.write(f"  Star particles not in this snapshot, setting to 0")
+                log.logger.warning("  Star particles not in this snapshot, setting to 0")
                 Mstar[i] = 0
 
             Mhalo[i] = getData(spVir,"particle_mass", sims[k].snap[idx[k][i]].pType, units="Msun").sum()
             #Mhalo[i] = spVir[("all","particle_mass")].in_units("Msun").sum()
-            #if verbose > 12: f.write(f"      Stellar Mass = {Mstar[i]:.2E} | Halo Mass = {Mhalo[i]:.2E}\n")
+            log.logger.debug(f"      Stellar Mass = {Mstar[i]:.2E} | Halo Mass = {Mhalo[i]:.2E}")
             Mrati[i] = Mstar[i]/Mhalo[i]
         
         uAx.plot(zList,Mrati,".--")
@@ -1118,7 +1117,7 @@ def plotMsMh(sims,idx,verbose=verboseLevel,plotSize=figSize,saveFig=saveAll,save
         
 # Create and save a movie from a frame list
 def makeMovie(frames, interval=50, verbose=verboseLevel, saveFigPath=0, message=0):
-    #if message != 0: f.write(f"\n{message}\n")
+    if message != 0: log.logger.info(f"\n{message}")
     # Create an animation figure using the first frame
     fig_anim, ax_anim = plt.subplots()
     im = ax_anim.imshow(frames[0], animated=True)
@@ -1136,11 +1135,11 @@ def makeMovie(frames, interval=50, verbose=verboseLevel, saveFigPath=0, message=
     fullPath = os.path.join(savePath,"placeholder.png")
     if message != 0:
         fullPath = os.path.join(savePath,message.replace(" ","_")+".gif")
-    #elif saveFigPath == 0:
-    #    if verbose > 3: f.write(f"WARNING: TITLE NOT SPECIFIED FOR THIS FIGURE, PLEASE SPECIFY A TITLE\n")
+    elif saveFigPath == 0:
+        log.logger.warning("TITLE NOT SPECIFIED FOR THIS FIGURE, PLEASE SPECIFY A TITLE")
 
     if saveFigPath != 0: fullPath = os.path.join(saveFigPath,message.replace(" ","_")+".gif")
-    #if verbose > 8: f.write(f"  Saving animation to {fullPath}\n")
+    log.logger.info(f"  Saving animation to {fullPath}")
 
     with rc_context({"mathtext.fontset": "stix"}):
         anime.save(fullPath,dpi=300)
@@ -1178,3 +1177,9 @@ def makeZbinFun(rlimit):
             newBin.append(bin[i]/(4*dh*1e3*rLim*1e3))
         return newBin
     return binFunctionZBins
+
+# Not sure I'll keep this
+def binFunctionSphVol(cil,bin):
+    binVal  = bin.x
+    vol     = (4/3)*np.pi*(binVal[1:]**3-binVal[:-1]**3)
+    return vol

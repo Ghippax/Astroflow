@@ -6,6 +6,7 @@ from ..core import utils
 from ..core.sim_objs import *
 from ..core import sim_prop
 from ..core import fields
+from .. import log
 import numpy as np
 import yt
 import h5py
@@ -44,7 +45,7 @@ def loadParticles(sim,snapI,pI,typeP):
 
 # Load center for one snapshot
 def loadCenters(sim,idx,overrideCenter=0,fun="3"):
-    methodDict = {"1":sim_prop.findCenter,"2":sim_prop.findCenter2,"3":sim_prop.findCenter3,"4":sim_prop.findCenter4,"5":sim_prop.findCenter5,"6":sim_prop.findCenter6,"7":sim_prop.findCenter7}
+    methodDict = {"1":sim_prop.findCenter,"2":sim_prop.findCenter2,"3":sim_prop.findCenter3,"4":sim_prop.findCenter4,"5":sim_prop.findCenter5,"6":sim_prop.findCenter6,"7":sim_prop.findCenter7,"8":sim_prop.findCenter8}
     if overrideCenter == 1:
         cen = sim.ytFull[idx].domain_center
         sim.snap[idx].center = np.array([cen[0].d,cen[1].d,cen[2].d])*1e3
@@ -53,7 +54,7 @@ def loadCenters(sim,idx,overrideCenter=0,fun="3"):
         sim.snap[idx].center = cens[0]
         sim.snap[idx].ytcen  = cens[1]
 
-# Default list with particle types (ideally this would automatically be figure out). Gas, DM and Stars
+# Default list with particle types (ideally this would automatically be figured out). Gas, DM and Stars
 defListPart = ["PartType0","PartType1","PartType4"]
 # Checks is particle types exist in a snapshot
 def getPtypes(sim,idx,defList):
@@ -74,58 +75,57 @@ def loadSnapshot(cosmological,sim,idx,trueIdx,overrideCenter=0,loadAllP=0,verbos
     sim.snap[idx].cosmo = cosmological
     sim.snap[idx].pType = getPtypes(sim,idx,defListPart)
     
-    # TODO: Fix logging
-    #if verboseLvl > 0: f.write(f"  - Loading snapshot {idx} true index {sim.snap[idx].ytIdx} at {sim.snap[idx].time} Myr \n")
-    #if cosmological:
-    #    f.write(f"    With Redshit: {sim.snap[idx].z} Scale: {sim.snap[idx].a} \n")
+    log.logger.info(f"  - Loading snapshot {idx} true index {sim.snap[idx].ytIdx} at {sim.snap[idx].time} Myr")
+    if cosmological:
+        log.logger.info(f"    With Redshift: {sim.snap[idx].z} Scale: {sim.snap[idx].a}")
     if sameCenter != 0:
         sim.snap[idx].center = np.array(sameCenter)
     else:
         loadCenters(sim,idx,overrideCenter=overrideCenter,fun=centerFun)
-    #if verboseLvl > 1: f.write(f"    Center initialized at {sim.snap[idx].center} pc \n")
-    #if verboseLvl > 2: f.write(f"    YT Center initialized at {sim.snap[idx].ytcen} \n")
+    log.logger.debug(f"    Center initialized at {sim.snap[idx].center} pc")
+    log.logger.debug(f"    YT Center initialized at {sim.snap[idx].ytcen}")
 
     # Getting virial radius after calculating center
-    if cosmological: sim.snap[idx].rvir = sim_prop.getRvir(sim,idx)
+    #if cosmological: sim.snap[idx].rvir = sim_prop.getRvir(sim,idx)
     # Now calculate the face-on and edge-on axis
-    fOn,eOn = sim_prop.getAxes(sim,idx)
-    sim.snap[idx].face_on = fOn
-    sim.snap[idx].edge_on = eOn
-    
+    #fOn,eOn = sim_prop.getAxes(sim,idx)
+    sim.snap[idx].face_on = None
+    sim.snap[idx].edge_on = None
+
     # Load each type of particle
     if loadAllP:
         nParts = sum(np.array(sim.ytFull[idx].parameters["NumPart_ThisFile"]) > 0)
         typeP = ["PartType"+str(i) for i in range(nParts)]
         sim.snap[idx].p = [None]*len(typeP)
         for i in range(len(typeP)):
-            #f.write(f"    - Loading {typeP[i]} \n")
+            log.logger.info(f"    - Loading {typeP[i]}")
             loadParticles(sim,idx,i,typeP[i])
 
 # Load a full simulation
 def loadSim(sim,ytData,allowedSnaps=0,overrideCenter=0,loadAllP=0,cosmological=0,
             verboseLvl=1,sameCenter=0,centerDefs=0):
-    #f.write(f"Loading from yt file: {ytData} \n")
-    #f.write(f"  Loading YT snapshots into list \n")
+    log.logger.info(f"Loading from yt file: {ytData}")
+    log.logger.info(f"  Loading YT snapshots into list")
 
     sim.ytFile = ytData
 
     # Load only some snapshots if desired
     if allowedSnaps != 0:
         sim.ytFull = [None]*len(allowedSnaps)
-        #f.write(f"  Loading only snapshots: {allowedSnaps} \n")
+        log.logger.info(f"  Loading only snapshots: {allowedSnaps}")
         for i in range(len(allowedSnaps)):
             sim.ytFull[i] = ytData[allowedSnaps[i]]
-            #if verboseLvl > 1: f.write(f"    Loaded yt snapshot {i} from file: {ytData[allowedSnaps[i]]} \n")
+            log.logger.debug(f"    Loaded yt snapshot {i} from file: {ytData[allowedSnaps[i]]}")
     else:
         sim.ytFull = [None]*len(ytData)
         ytStr = [None]*len(ytData)
         for i in range(len(ytData)):
             #ytStr[i] = str(ytData[i].filename)[:]
             ytStr[i] = 0
-        #f.write(f"  Loading all snapshots found {ytStr} \n")    
+        log.logger.info(f"  Loading all snapshots found {ytStr}")    
         for i in range(len(ytData)):
             sim.ytFull[i] = ytData[i]
-            #if verboseLvl > 1: f.write(f"    Loaded yt snapshot {i} from file: {ytData[i]} \n")
+            log.logger.debug(f"    Loaded yt snapshot {i} from file: {ytData[i]}")
 
     sim.cosmo = cosmological
     sim.snap  = [None]*len(sim.ytFull)
@@ -163,8 +163,8 @@ def isCosmological(path):
         if "Parameters" in f:
             attrs = f["Parameters"].attrs
             if "ComovingIntegrationOn" not in attrs:
-                f.write(f"ERROR: ComovingIntegrationOn attribute was not detected in this snapshot. Either the snapshot is corrupt, or you " \
-                        "should yell at the dev of this script so they implement further snapshot compatibility with what you are trying to load.\n")
+                log.logger.error("ComovingIntegrationOn attribute was not detected in this snapshot. Either the snapshot is corrupt, or you " \
+                        "should yell at the dev of this script so they implement further snapshot compatibility with what you are trying to load.")
             if attrs["ComovingIntegrationOn"] > 0.1:
                 return True
         else: # Happens in G3 snapshots
@@ -175,7 +175,7 @@ def isCosmological(path):
 
 # All powerful load function
 def load(name, path, centerDefs, boundbox = 0, verboseLvl = verbosity,
-          overrideCenter = 0, allowedSnaps = 0, sameCenter = 0, loadP = 0):
+          overrideCenter = 0, allowedSnaps = 0, sameCenter = 0, loadP = 0, snapFilename = "snapshot"):
     simulation = simul(name)
     # Load yt file
     ytDataset   = None
@@ -185,11 +185,11 @@ def load(name, path, centerDefs, boundbox = 0, verboseLvl = verbosity,
         path = os.path.join(path,"output")
     
     # Figure out if they are inside multiple directories or not
-    snapdirs = [name for name in os.listdir(path) if name.startswith("snapdir") and os.path.isdir(os.path.join(path,name))]
+    snapdirs = [spdir for spdir in os.listdir(path) if spdir.startswith("snapdir") and os.path.isdir(os.path.join(path,spdir))]
     if len(snapdirs) > 0:
         # Finds the snapshots on the first directory (sufficent for figuring out if it's cosmological and in pieces or not)
         pathDirs = [os.path.join(path,snapdirectory) for snapdirectory in snapdirs]
-        snapshot_files = [os.path.join(pathDirs[0],file) for file in os.listdir(pathDirs[0]) if os.path.isfile(os.path.join(pathDirs[0], file)) and file.startswith("snapshot") and file.endswith(".hdf5")]
+        snapshot_files = [os.path.join(pathDirs[0],file) for file in os.listdir(pathDirs[0]) if os.path.isfile(os.path.join(pathDirs[0], file)) and file.startswith(snapFilename) and file.endswith(".hdf5")]
         cosmological = isCosmological(snapshot_files[0])
 
         # Find out if the snapshot has multiple snapshots or not
@@ -197,11 +197,11 @@ def load(name, path, centerDefs, boundbox = 0, verboseLvl = verbosity,
         for fileS in snapshot_files:
             if fileS.endswith(".0.hdf5"):
                 isMultiple = True
-        suffix = "snapdir_???/snapshot_???.hdf5" if not isMultiple else "snapdir_???/snapshot_???.0.hdf5"
+        suffix = f"snapdir_???/{snapFilename}_???.hdf5" if not isMultiple else f"snapdir_???/{snapFilename}_???.0.hdf5"
         pathPattern = os.path.join(path,suffix)
     else:
         # Finds all snapshot files and uses it to discover if it's cosmological or not
-        snapshot_files = [os.path.join(path,file) for file in os.listdir(path) if os.path.isfile(os.path.join(path, file)) and file.startswith("snapshot") and file.endswith(".hdf5")]
+        snapshot_files = [os.path.join(path,file) for file in os.listdir(path) if os.path.isfile(os.path.join(path, file)) and file.startswith(snapFilename) and file.endswith(".hdf5")]
         cosmological = isCosmological(snapshot_files[0])
 
         # Find out if the snapshot has multiple snapshots or not
@@ -209,13 +209,13 @@ def load(name, path, centerDefs, boundbox = 0, verboseLvl = verbosity,
         for fileS in snapshot_files:
             if fileS.endswith(".0.hdf5"):
                 isMultiple = True
-        suffix = "snapshot_???.hdf5" if not isMultiple else "snapshot_???.0.hdf5"
+        suffix = f"{snapFilename}_???.hdf5" if not isMultiple else f"{snapFilename}_???.0.hdf5"
         pathPattern = os.path.join(path,suffix)
 
     # Set the units and use our hard earned path pattern to load the whole Gadget timeseries dataset
     unitBase = gadgetUnitsCosmo if cosmological else gadgetUnitsIso
-    #f.write(f"\n- Started loading simulation {name} \n")
-    #f.write(f"  With cosmology {cosmological}\n")
+    log.logger.info(f"\n- Started loading simulation {name}")
+    log.logger.info(f"  With cosmology {cosmological}")
             
     if not boundbox:
         ytDataset = yt.load(pathPattern,unit_base=unitBase)
@@ -234,7 +234,7 @@ def load(name, path, centerDefs, boundbox = 0, verboseLvl = verbosity,
         snhtArr.append(simulation.snap[j])
         centArr.append(simulation.snap[j].ytcen)
 
-    fields.add_field_to_snaps(snapArr,snhtArr,centArr)
+    #fields.add_field_to_snaps(snapArr,snhtArr,centArr)
 
     return simulation
 

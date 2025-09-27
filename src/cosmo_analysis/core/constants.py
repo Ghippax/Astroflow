@@ -6,11 +6,13 @@ import copy
 import matplotlib.pyplot as plt
 
 ## OPTIONS
-#f.write(f"\nLoading Finished! Setting up plotting options... \n")
 # Figure options
 figSize   = 8  # Fig size for plt plots
 ytFigSize = 12 # Window size for the yt plot
 fontSize  = 12 # Fontsize in yt plots
+
+# TODO: Fix this path
+savePath = "/sqfs/work/hp240141/z6b616/analysis"
 
 # Modified color maps
 starCmap = copy.copy(plt.get_cmap('autumn'))
@@ -39,4 +41,5 @@ starFigSize    = 80          # kpc (Size of star map)
 starBufferSize = 400         # N   (Buffer size of star map)
 gasPart        = "PartType0" # Field for gas SPH particles 
 starPart       = "PartType4" # Field for star particles
+dmPart         = "PartType1" # Field for dark matter particles
 zSolar         = 0.0204      # Solar metallicity
