@@ -1,0 +1,53 @@
+# Example Configuration for Cosmo Analysis
+#
+# This is a working example configuration with common settings.
+# Copy this to config.yaml and customize for your setup.
+
+paths:
+  output_directory: "./output"
+  data_files:
+    bilcontour: "bilcontour.txt"
+    projection_list: "outputlist_projection.txt"
+
+simulation_parameters:
+  particle_types:
+    gas: "PartType0"
+    dm: "PartType1"
+    star: "PartType4"
+  
+  gadget_units:
+    UnitLength_in_cm: 3.08568e+21      # 1 kpc
+    UnitMass_in_g: 1.989e+43           # 10^10 Msun
+    UnitVelocity_in_cm_per_s: 100000   # 1 km/s
+  
+  arepo_units:
+    UnitLength_in_cm: 3.0868e+24       # 1 Mpc
+    UnitMass_in_g: 1.989e+43           # 10^10 Msun
+    UnitVelocity_in_cm_per_s: 100000   # 1 km/s
+
+plotting_defaults:
+  figsize: [8, 8]
+  yt_figsize: 12
+  fontsize: 12
+  dpi: 300
+  default_colormap: "viridis"
+  save_plots: true
+  show_plots: false
+
+analysis_options:
+  fig_width: 30
+  buffer_size: 800
+  young_star_age: 20
+  low_res_mock: 750
+  star_fig_size: 80
+  star_buffer_size: 400
+  z_solar: 0.0204
+
+cosmology:
+  hubble_constant: 0.702
+  omega_matter: 0.272
+  omega_lambda: 0.728
+
+logging:
+  level: "INFO"
+  verbose_level: 15
