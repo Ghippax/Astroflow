@@ -1,6 +1,10 @@
-# TODO: Description of file for documentation
+"""Constants and default configuration values for cosmo_analysis.
 
-# TODO: Description of functions for documentation
+This module is being gradually deprecated in favor of the new config.py system.
+It remains for backward compatibility but should not be used for new code.
+
+TODO: Migrate all hardcoded constants to config.yaml
+"""
 
 import copy
 import matplotlib.pyplot as plt
@@ -11,19 +15,67 @@ figSize   = 8  # Fig size for plt plots
 ytFigSize = 12 # Window size for the yt plot
 fontSize  = 12 # Fontsize in yt plots
 
-# TODO: Fix this path
+# TODO: Fix this path - use config.yaml instead
 savePath = "/sqfs/work/hp240141/z6b616/analysis"
 
-# Modified color maps
-starCmap = copy.copy(plt.get_cmap('autumn'))
-starCmap.set_bad(color='k') # (log(1e4) - log(1e1)) / (log(1e6) - log(1e1)) = 0.6
-starCmap.set_under(color='k')
-mColorMap = copy.copy(plt.get_cmap('algae'))
-mColorMap.set_bad(mColorMap(0.347)) # (0.02041 - 0.01) / (0.04 - 0.01) = 0.347
-mColorMap.set_under(mColorMap(0))
-mColorMap2 = copy.copy(plt.get_cmap('algae'))
-mColorMap2.set_bad(mColorMap2(0))
-mColorMap2.set_under(mColorMap2(0))
+# Modified color maps - lazily initialized to avoid import errors
+_starCmap = None
+_mColorMap = None
+_mColorMap2 = None
+
+def _init_colormaps():
+    """Initialize colormaps lazily to avoid import-time errors."""
+    global _starCmap, _mColorMap, _mColorMap2
+    
+    if _starCmap is None:
+        _starCmap = copy.copy(plt.get_cmap('autumn'))
+        _starCmap.set_bad(color='k')
+        _starCmap.set_under(color='k')
+    
+    if _mColorMap is None:
+        try:
+            import yt
+            _mColorMap = copy.copy(plt.get_cmap('algae'))
+            _mColorMap.set_bad(_mColorMap(0.347))
+            _mColorMap.set_under(_mColorMap(0))
+        except (ValueError, ImportError):
+            # Fall back to viridis if algae not available
+            _mColorMap = copy.copy(plt.get_cmap('viridis'))
+            _mColorMap.set_bad(_mColorMap(0.347))
+            _mColorMap.set_under(_mColorMap(0))
+    
+    if _mColorMap2 is None:
+        try:
+            import yt
+            _mColorMap2 = copy.copy(plt.get_cmap('algae'))
+            _mColorMap2.set_bad(_mColorMap2(0))
+            _mColorMap2.set_under(_mColorMap2(0))
+        except (ValueError, ImportError):
+            # Fall back to viridis if algae not available
+            _mColorMap2 = copy.copy(plt.get_cmap('viridis'))
+            _mColorMap2.set_bad(_mColorMap2(0))
+            _mColorMap2.set_under(_mColorMap2(0))
+
+def get_star_cmap():
+    """Get star colormap, initializing if necessary."""
+    _init_colormaps()
+    return _starCmap
+
+def get_metal_cmap():
+    """Get metallicity colormap, initializing if necessary."""
+    _init_colormaps()
+    return _mColorMap
+
+def get_metal_cmap2():
+    """Get second metallicity colormap, initializing if necessary."""
+    _init_colormaps()
+    return _mColorMap2
+
+# Backward compatibility - will be initialized on first use  
+# Access via functions above for safety, but keep these for existing code
+starCmap = None
+mColorMap = None
+mColorMap2 = None
 
 # Scaffolding options (Global parameters for how the plotting functions below should operate)
 verboseLevel    = 15                    # How detailed is the console log, higher is more detailed

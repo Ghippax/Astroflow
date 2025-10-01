@@ -1,0 +1,101 @@
+# Cosmo Analysis Configuration Template
+#
+# Copy this file to 'config.yaml' and customize it for your setup.
+# You can also set the COSMO_CONFIG environment variable to point to your config file.
+
+# Paths configuration
+paths:
+  # Main output directory for analysis results
+  output_directory: "/path/to/your/output"
+  
+  # Data files used by analysis functions
+  data_files:
+    # File containing bilcontour data for KS plots
+    bilcontour: "bilcontour.txt"
+    # File listing projection timestamps for centering calculations
+    projection_list: "outputlist_projection.txt"
+
+# Simulation-specific parameters
+simulation_parameters:
+  # Particle type identifiers (Gadget/AREPO convention)
+  particle_types:
+    gas: "PartType0"
+    dm: "PartType1"
+    star: "PartType4"
+  
+  # Unit conversions for GADGET simulations
+  gadget_units:
+    UnitLength_in_cm: 3.08568e+21      # 1 kpc
+    UnitMass_in_g: 1.989e+43           # 10^10 Msun
+    UnitVelocity_in_cm_per_s: 100000   # 1 km/s
+  
+  # Unit conversions for AREPO simulations
+  arepo_units:
+    UnitLength_in_cm: 3.0868e+24       # 1 Mpc
+    UnitMass_in_g: 1.989e+43           # 10^10 Msun
+    UnitVelocity_in_cm_per_s: 100000   # 1 km/s
+
+# Default plotting parameters
+plotting_defaults:
+  # Figure size for matplotlib plots [width, height] in inches
+  figsize: [8, 8]
+  
+  # Window size for yt plots
+  yt_figsize: 12
+  
+  # Font size for plot labels
+  fontsize: 12
+  
+  # DPI for saved figures
+  dpi: 300
+  
+  # Default colormap for plots
+  default_colormap: "algae"
+  
+  # Whether to save plots by default
+  save_plots: true
+  
+  # Whether to show plots interactively by default
+  show_plots: false
+
+# Analysis options
+analysis_options:
+  # Width of the analysis box in kpc
+  fig_width: 30
+  
+  # Default bin number for coordinate-type histograms
+  buffer_size: 800
+  
+  # Age threshold for young stars in Myr (for SFR density calculations)
+  young_star_age: 20
+  
+  # Resolution of mock observations in pc
+  low_res_mock: 750
+  
+  # Size of star map in kpc
+  star_fig_size: 80
+  
+  # Buffer size for star map
+  star_buffer_size: 400
+  
+  # Solar metallicity value
+  z_solar: 0.0204
+
+# Cosmological parameters
+cosmology:
+  # Hubble constant (H0 / 100)
+  hubble_constant: 0.702
+  
+  # Matter density parameter
+  omega_matter: 0.272
+  
+  # Dark energy density parameter
+  omega_lambda: 0.728
+
+# Logging configuration
+logging:
+  # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  
+  # Verbose level for detailed console output (higher = more detailed)
+  verbose_level: 15

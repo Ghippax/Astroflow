@@ -66,3 +66,18 @@ venv.bak/
 # IDE settings
 .vscode/
 .idea/
+
+# User configuration files
+config.yaml
+**/config.yaml
+
+# Sphinx documentation
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# Test outputs
+.pytest_cache/
+test_output/
+*.coverage
+htmlcov/

@@ -46,6 +46,18 @@ def setLegend(uAx,sims,idx):
     uAx.legend([sims[i].name+timeInfo[i] for i in range(len(sims))])
 
 def handleFig(figure, switches, message, saveFigPath, verbose):
+    """Handle figure display, saving, or animation frame capture.
+    
+    Args:
+        figure: matplotlib figure object
+        switches: tuple of (show, animate, save) boolean flags
+        message: filename or message for saved figure
+        saveFigPath: directory path to save figure (overrides default)
+        verbose: verbosity level for logging
+    
+    Returns:
+        numpy array of image if animate flag is True, None otherwise
+    """
     # Shows figure
     if switches[0]:
         log.logger.debug("Showing to screen")
@@ -56,16 +68,38 @@ def handleFig(figure, switches, message, saveFigPath, verbose):
         return saveFrame(figure,verbose)
     
     # Saves figure with message path as title
-    if switches[2]: 
-        fullPath = os.path.join(savePath,"placeholder.png")
+    if switches[2]:
+        # Determine base directory for saving
+        if saveFigPath != 0:
+            # Use provided path
+            base_dir = saveFigPath
+        else:
+            # Try to get from config, fall back to old constant
+            try:
+                from ..config import get_config
+                config = get_config()
+                base_dir = config.get('paths.output_directory', savePath)
+            except:
+                base_dir = savePath
+        
+        # Construct full path
         if message != 0:
-            fullPath = os.path.join(savePath,message.replace(" ","_")+".png")
-        elif saveFigPath == 0:
+            fullPath = os.path.join(base_dir, message.replace(" ","_")+".png")
+        else:
+            fullPath = os.path.join(base_dir, "placeholder.png")
             log.logger.warning("TITLE NOT SPECIFIED FOR THIS FIGURE, PLEASE SPECIFY A TITLE")
 
-        if saveFigPath != 0: fullPath = os.path.join(saveFigPath,message.replace(" ","_")+".png")
         log.logger.info(f"  Saving figure to {fullPath}")
-        figure.savefig(fullPath, bbox_inches='tight', pad_inches=0.03, dpi=300)
+        
+        # Get DPI from config if available
+        try:
+            from ..config import get_config
+            config = get_config()
+            dpi = config.get('plotting_defaults.dpi', 300)
+        except:
+            dpi = 300
+            
+        figure.savefig(fullPath, bbox_inches='tight', pad_inches=0.03, dpi=dpi)
         plt.close(figure)
 
 # Plot a cool multipanel for multiple simulations and/or projections
