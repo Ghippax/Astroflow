@@ -56,8 +56,9 @@ class TestPhaseVisual:
         try:
             ds = yt.load_sample("IsolatedGalaxy")
             return ds
-        except Exception:
-            # Create synthetic dataset
+        except Exception as e:
+            # Create synthetic dataset if sample can't be loaded
+            print(f"Could not load yt sample data ({e}), creating synthetic dataset")
             from yt.testing import fake_random_ds
             ds = fake_random_ds(
                 64,
@@ -83,28 +84,24 @@ class TestPhaseVisual:
         
         save_path = str(tmp_path)
         
-        try:
-            ytPhasePanel(
-                [sim], [0],
-                part="gas",  # Use 'gas' for synthetic dataset
-                zFields=["density", "temperature", "cell_mass"],
-                zWidth=10,
-                xb=50,  # Lower resolution for faster testing
-                yb=50,
-                saveFig=True,
-                showFig=False,
-                saveFigPath=save_path,
-                message="test_phase",
-                config=config
-            )
-            
-            # Check that output was created
-            output_file = tmp_path / "test_phase.png"
-            assert output_file.exists()
-            assert output_file.stat().st_size > 0
-            
-        except Exception as e:
-            pytest.skip(f"Phase plot test skipped due to: {e}")
+        ytPhasePanel(
+            [sim], [0],
+            part="gas",  # Use 'gas' for synthetic dataset
+            zFields=["density", "temperature", "cell_mass"],
+            zWidth=10,
+            xb=50,  # Lower resolution for faster testing
+            yb=50,
+            saveFig=True,
+            showFig=False,
+            saveFigPath=save_path,
+            message="test_phase",
+            config=config
+        )
+        
+        # Check that output was created
+        output_file = tmp_path / "test_phase.png"
+        assert output_file.exists(), f"Output file {output_file} was not created"
+        assert output_file.stat().st_size > 0, "Output file is empty"
         
         plt.close('all')
     
@@ -138,15 +135,19 @@ class TestPhaseVisual:
                 config=config
             )
             
-            if result is not None:
-                frames.append(result)
+            assert result is not None, f"Frame {i} was not generated"
+            frames.append(result)
         
-        # If we got frames, check they're similar
-        if len(frames) == 2:
-            assert frames[0].shape == frames[1].shape
-            # Allow some variation due to rendering
-            diff = np.abs(frames[0].astype(float) - frames[1].astype(float)).mean()
-            assert diff < 50  # Allow some rendering variation
+        # Verify we got both frames
+        assert len(frames) == 2, f"Expected 2 frames but got {len(frames)}"
+        
+        # Check they're similar
+        assert frames[0].shape == frames[1].shape, \
+            f"Frame shapes don't match: {frames[0].shape} vs {frames[1].shape}"
+        
+        # Allow some variation due to rendering
+        diff = np.abs(frames[0].astype(float) - frames[1].astype(float)).mean()
+        assert diff < 50, f"Frames differ too much: mean diff = {diff}"
         
         plt.close('all')
 

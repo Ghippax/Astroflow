@@ -36,19 +36,16 @@ def yt_sample_dataset():
     except Exception as e:
         # If we can't download, create a synthetic dataset
         print(f"Could not load yt sample data ({e}), creating synthetic dataset")
-        try:
-            # Create a simple fake dataset for testing
-            from yt.testing import fake_random_ds
-            ds = fake_random_ds(
-                64, 
-                nprocs=1, 
-                fields=[("gas", "density"), ("gas", "temperature")],
-                units=["g/cm**3", "K"],
-                negative=[False, False]
-            )
-            return ds
-        except Exception as e2:
-            pytest.skip(f"Could not create synthetic dataset: {e2}")
+        # Create a simple fake dataset for testing
+        from yt.testing import fake_random_ds
+        ds = fake_random_ds(
+            64, 
+            nprocs=1, 
+            fields=[("gas", "density"), ("gas", "temperature"), ("gas", "cell_mass")],
+            units=["g/cm**3", "K", "g"],
+            negative=[False, False, False]
+        )
+        return ds
 
 
 @pytest.fixture
@@ -160,33 +157,29 @@ class TestYTProjectionPlots:
         # Create multi-panel plot
         save_path = str(tmp_path)
         
-        try:
-            ytMultiPanel(
-                sims=[mock_simulation_from_yt],
-                idx=[0],
-                zField=["density"],
-                part="gas",
-                zWidth=50,
-                bSize=128,  # Lower resolution for faster testing
-                saveFig=True,
-                showFig=False,
-                saveFigPath=save_path,
-                message="test_multipanel",
-                config=config
-            )
-            
-            # Check that output was created
-            output_file = tmp_path / "test_multipanel.png"
-            assert output_file.exists()
-            assert output_file.stat().st_size > 0
-            
-            # Load and verify image
-            img = Image.open(output_file)
-            assert img.size[0] > 0
-            assert img.size[1] > 0
-            
-        except Exception as e:
-            pytest.skip(f"ytMultiPanel test skipped due to: {e}")
+        ytMultiPanel(
+            sims=[mock_simulation_from_yt],
+            idx=[0],
+            zField=["density"],
+            part="gas",
+            zWidth=50,
+            bSize=128,  # Lower resolution for faster testing
+            saveFig=True,
+            showFig=False,
+            saveFigPath=save_path,
+            message="test_multipanel",
+            config=config
+        )
+        
+        # Check that output was created
+        output_file = tmp_path / "test_multipanel.png"
+        assert output_file.exists(), f"Output file {output_file} was not created"
+        assert output_file.stat().st_size > 0, "Output file is empty"
+        
+        # Load and verify image
+        img = Image.open(output_file)
+        assert img.size[0] > 0, "Image width is 0"
+        assert img.size[1] > 0, "Image height is 0"
     
     def test_visual_consistency_projection(self, yt_sample_dataset, tmp_path, reset_config):
         """Test that repeated projections produce consistent results."""
@@ -265,10 +258,25 @@ class TestVisualRegression:
         config = Config.load_config()
         Config.set_instance(config)
         
-        # Check if baseline exists
+        # First establish baseline if it doesn't exist
         baseline_path = baseline_dir / "density_projection_baseline.png"
         if not baseline_path.exists():
-            pytest.skip("Baseline not established yet")
+            # Create the baseline
+            proj = yt.ProjectionPlot(
+                yt_sample_dataset,
+                'z',
+                ('gas', 'density'),
+                center=yt_sample_dataset.domain_center,
+                width=(50, 'kpc')
+            )
+            proj.save(str(baseline_path))
+            
+            # Store hash
+            img = Image.open(baseline_path)
+            img_array = np.array(img)
+            baseline_hash = image_hash(img_array)
+            hash_file = baseline_dir / "density_projection_baseline.hash"
+            hash_file.write_text(baseline_hash)
         
         # Create new projection with same parameters
         proj = yt.ProjectionPlot(
