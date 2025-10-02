@@ -68,3 +68,39 @@ def reset_config():
     Config._instance = None
     yield
     Config._instance = None
+
+
+@pytest.fixture
+def mock_simulation():
+    """Create a mock simulation object for testing plotting functions.
+    
+    This creates a minimal mock simulation with the structure expected by
+    plotting functions, but without requiring actual simulation data.
+    
+    Returns:
+        Mock: A mock simulation object with required attributes
+    """
+    from unittest.mock import Mock
+    import numpy as np
+    
+    # Create mock simulation
+    sim = Mock()
+    sim.name = "MockSim"
+    sim.cosmo = False
+    
+    # Create mock snapshot
+    snap = Mock()
+    snap.time = 100.0
+    snap.z = 0.0
+    snap.center = np.array([0.0, 0.0, 0.0])
+    snap.ytcen = (0.0, 'kpc')
+    
+    sim.snap = [snap]
+    
+    # Create mock yt dataset
+    yt_ds = Mock()
+    yt_ds.field_info = {}
+    
+    sim.ytFull = [yt_ds]
+    
+    return sim
