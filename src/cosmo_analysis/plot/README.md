@@ -164,7 +164,26 @@ pytest tests/test_plot_integration.py -m integration
 
 # Run visual tests
 pytest tests/test_plot_integration.py -m visual
+
+# Run visual regression tests with yt data
+pytest tests/test_plot_visual_regression.py -m visual
+
+# Skip slow tests (e.g., those downloading data)
+pytest tests/test_plot_*.py -m "not slow"
 ```
+
+### Visual Regression Tests
+
+The `test_plot_visual_regression.py` module includes tests that:
+
+- Use yt sample data (`IsolatedGalaxy`) when available
+- Fall back to synthetic datasets when network is unavailable
+- Establish baselines for visual output
+- Compare new outputs against baselines
+- Test consistency across different projections
+- Verify config parameters affect output correctly
+
+These tests ensure that changes to the code don't inadvertently break visual output.
 
 ## Development
 
