@@ -72,19 +72,22 @@ def loadCenters(sim, idx, overrideCenter=0, fun="3", projPath=None):
         sim: Simulation object
         idx: Snapshot index
         overrideCenter: If 1, use domain center instead of calculation
-        fun: Centering method to use ("1"-"8")
+        fun: Centering method to use (numeric code "1"-"8" or strategy name)
         projPath: Path to projection file (for methods 4 and 7)
     """
-    methodDict = {"1":sim_prop.findCenter,"2":sim_prop.findCenter2,"3":sim_prop.findCenter3,"4":sim_prop.findCenter4,"5":sim_prop.findCenter5,"6":sim_prop.findCenter6,"7":sim_prop.findCenter7,"8":sim_prop.findCenter8}
+    from ..core.centering import get_centering_registry, get_strategy_name
+    
     if overrideCenter == 1:
         cen = sim.ytFull[idx].domain_center
         sim.snap[idx].center = np.array([cen[0].d,cen[1].d,cen[2].d])*1e3
     else:
-        # Pass projPath to methods that need it (4 and 7)
-        if fun in ["4", "7"]:
-            cens = methodDict[fun](sim, idx, projPath=projPath)
-        else:
-            cens = methodDict[fun](sim, idx)
+        # Convert legacy code to strategy name
+        strategy_name = get_strategy_name(fun)
+        
+        # Use centering registry
+        registry = get_centering_registry()
+        cens = registry.calculate_center(strategy_name, sim, idx, projPath=projPath)
+        
         sim.snap[idx].center = cens[0]
         sim.snap[idx].ytcen  = cens[1]
 
