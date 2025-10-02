@@ -1,7 +1,12 @@
-# TODO: Description of file for documentation
-# TODO: Fix logging
-# TODO: Description of functions for documentation
+"""Plotting functions for cosmo_analysis.
 
+This module provides plotting functions for cosmological simulations.
+It re-exports functions from specialized modules for backward compatibility
+while providing a modular structure.
+
+NOTE: This file maintains backward compatibility. New code should import
+from the specialized modules (base, projection, phase, etc.) directly.
+"""
 
 import yt
 import numpy as np
@@ -23,262 +28,17 @@ from ..core.utils     import *
 from ..io.load        import *
 from .. import log
 
+# Import from new modular structure
+from .base import saveFrame, setLegend, handleFig
+from .projection import ytMultiPanel, ytProjPanel
+from .utils import (makeMovie, binFunctionCilBins, binFunctionSphBins, 
+                   binFunctionCilBinsSFR, makeZbinFun, binFunctionSphVol, aFromT)
+
 yt.set_log_level(0)
+
+# Legacy global - kept for backward compatibility, use config instead
 savePath = "/sqfs/work/hp240141/z6b616/analysis"
 
-# PLOTTING MACRO FUNCTIONS (rerun whenever config options are changed for new defaults)
-# Return the frame for an animation
-def saveFrame(figure,verbose):
-    buf = io.BytesIO()
-    figure.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=300)
-    buf.seek(0)
-    img = np.array(Image.open(buf))
-    log.logger.debug("Figure saved to buffer")
-    buf.close()
-    plt.close(figure)
-    return img
-
-def setLegend(uAx,sims,idx):
-    timeInfo = [None]*len(sims)
-    for i in range(len(sims)):
-        timeInfo[i] = " t="+str(round(sims[i].snap[idx[i]].time))+" Myr"
-        if sims[i].cosmo: timeInfo[i] = " z="+str(round(sims[i].snap[idx[i]].z,2))
-    uAx.legend([sims[i].name+timeInfo[i] for i in range(len(sims))])
-
-def handleFig(figure, switches, message, saveFigPath, verbose):
-    """Handle figure display, saving, or animation frame capture.
-    
-    Args:
-        figure: matplotlib figure object
-        switches: tuple of (show, animate, save) boolean flags
-        message: filename or message for saved figure
-        saveFigPath: directory path to save figure (overrides default)
-        verbose: verbosity level for logging
-    
-    Returns:
-        numpy array of image if animate flag is True, None otherwise
-    """
-    # Shows figure
-    if switches[0]:
-        log.logger.debug("Showing to screen")
-        plt.show()
-
-    # Return the frame for an animation
-    if switches[1]:     
-        return saveFrame(figure,verbose)
-    
-    # Saves figure with message path as title
-    if switches[2]:
-        # Determine base directory for saving
-        if saveFigPath != 0:
-            # Use provided path
-            base_dir = saveFigPath
-        else:
-            # Try to get from config, fall back to old constant
-            try:
-                from ..config import get_config
-                config = get_config()
-                base_dir = config.get('paths.output_directory', savePath)
-            except:
-                base_dir = savePath
-        
-        # Construct full path
-        if message != 0:
-            fullPath = os.path.join(base_dir, message.replace(" ","_")+".png")
-        else:
-            fullPath = os.path.join(base_dir, "placeholder.png")
-            log.logger.warning("TITLE NOT SPECIFIED FOR THIS FIGURE, PLEASE SPECIFY A TITLE")
-
-        log.logger.info(f"  Saving figure to {fullPath}")
-        
-        # Get DPI from config if available
-        try:
-            from ..config import get_config
-            config = get_config()
-            dpi = config.get('plotting_defaults.dpi', 300)
-        except:
-            dpi = 300
-            
-        figure.savefig(fullPath, bbox_inches='tight', pad_inches=0.03, dpi=dpi)
-        plt.close(figure)
-
-# Plot a cool multipanel for multiple simulations and/or projections
-def ytMultiPanel(sims, idx, zField = ["Density"], axisProj = 0, part = gasPart, zFieldUnit = "g/cm**2", cM = "algae", takeLog=1, zFieldLim = [1.5e-4,1e-1], wField=0, zWidth=figWidth,bSize=buffSize,
-                flipOrder=0,
-                verbose=verboseLevel, plotSize=ytFigSize, saveFig=saveAll, saveFigPath=0, showFig=showAll, message=0, fsize=fontSize, animate=0):
-        
-    if message != 0: log.logger.info(f"\n{message}")
-    # Option setup
-    numP = len(zField)
-    numS = len(sims)
-    if isinstance(axisProj  ,list) == False: axisProj   = [axisProj  ]*numS
-    if isinstance(part      ,list) == False: part       = [part      ]*numP
-    if isinstance(zFieldUnit,list) == False: zFieldUnit = [zFieldUnit]*numP
-    if isinstance(cM        ,list) == False: cM         = [cM        ]*numP
-    if isinstance(takeLog   ,list) == False: takeLog    = [takeLog   ]*numP
-    if isinstance(wField    ,list) == False: wField     = [wField    ]*numP
-    if isinstance(zWidth    ,list) == False: zWidth     = [zWidth    ]*numP
-    if isinstance(zFieldLim ,list) == False: zFieldLim  = [zFieldLim ]*numP
-    if isinstance(bSize     ,list) == False: bSize      = [bSize     ]*numP
-    if not all(isinstance(lIdx, list) for lIdx in zFieldLim):
-        zFieldLimAux = [None]*numP
-        for j in range(numP): zFieldLimAux[j] = zFieldLim 
-        zFieldLim = zFieldLimAux
-
-    rowIter = zField
-    colIter = sims
-    if flipOrder:
-        rowIter = sims
-        colIter = zField
-    # Panel fig setup
-    panelSize = (len(rowIter), len(colIter))
-    panelFig = plt.figure()
-    loc = "right" if not flipOrder else "bottom"
-    panelGrid = AxesGrid(panelFig,(0,0,1,1),nrows_ncols=panelSize,axes_pad=0.02,label_mode="1",share_all=False,cbar_location=loc,cbar_mode="edge",cbar_size="5%",cbar_pad="2%")
-
-    # Loading snapshots
-    snapArr  = [sims[i].ytFull[idx[i]] for i in range(numS)]
-    titleArr = [sims[i].name           for i in range(numS)]
-
-    for i,snap in enumerate(snapArr):
-        log.logger.info(f"  - Projecting {sims[i].name} Time {sims[i].snap[idx[i]].time:.1f} Redshift {sims[i].snap[idx[i]].z:.2f} Axis {axisProj[i]}")
-        for j,pField in enumerate(zField):
-            iterRow, iterCol = (j,i)
-            if flipOrder: iterRow, iterCol = (i,j)
-
-            log.logger.debug(f"    Projecting field {pField} Particle {part[j]} Weight {wField[j]} Width {zWidth[j]} Unit {zFieldUnit[j]} Lim {zFieldLim[j]}")
-            # Setup projection of pField of snap
-            if takeLog[j] == 0: snap.field_info[(part[j], pField)].take_log = False
-            if wField[j] != 0:
-                fig1 = yt.ProjectionPlot(snap, axisProj[i], (part[j], pField), window_size=plotSize, weight_field=(part[j],wField[j]), fontsize=fsize, center=sims[i].snap[idx[i]].ytcen)
-            else:
-                if part[j]=="PartType4":
-                    fig1 = yt.ParticleProjectionPlot(snap, axisProj[i], (part[j], pField), window_size=plotSize, depth=(zWidth[j],"kpc"), fontsize=fsize, center=sims[i].snap[idx[i]].ytcen)
-                else:
-                    fig1 = yt.ProjectionPlot(snap, axisProj[i], (part[j], pField), window_size=plotSize, fontsize=fsize, center=sims[i].snap[idx[i]].ytcen)
-            fig1.set_width(zWidth[j],"kpc")
-            if zFieldUnit[j] != 0: fig1.set_unit((part[j], pField), zFieldUnit[j])
-            if not(zFieldLim[j][0] == 0 and zFieldLim[j][1]  == 0): fig1.set_zlim((part[j], pField), zmin=zFieldLim[j][0], zmax=zFieldLim[j][1])
-            fig1.set_cmap(field=(part[j], pField), cmap=cM[j])
-            fig1.set_buff_size(bSize[j])
-            if ((not flipOrder) and iterRow == 0) or (flipOrder and iterCol == 0):  fig1.annotate_timestamp(redshift=True)
-
-            # Transfers yt plot to plt axes and renders the figure
-            fullPlot        = fig1.plots[part[j], pField]
-            fullPlot.figure = panelFig
-            fullPlot.axes   = panelGrid[iterCol+iterRow*len(colIter)].axes
-            
-            fullPlot.cax = panelGrid.cbar_axes[iterRow]
-            if flipOrder: fullPlot.cax = panelGrid.cbar_axes[iterCol]
-
-            log.logger.debug("    Rendering")
-            fig1._setup_plots()
-
-            if ((not flipOrder) and iterRow == 0) or (flipOrder and iterCol == 0): 
-                nameTag = AnchoredText(titleArr[i], loc=2, prop=dict(size=9), frameon=True)
-                panelGrid[iterCol+iterRow*len(colIter)].axes.add_artist(nameTag)
-
-    handleFig(panelFig,[showFig,animate,saveFig],message,saveFigPath,verbose)
-    
-# Plots field projections, defaults to standard density projection
-def ytProjPanel(simArr, idxArr, verbose=verboseLevel, plotSize=ytFigSize, saveFig=saveAll, saveFigPath=0, showFig=showAll,
-                message=0, twoAxis=True, axisProj = [2,0], part = "PartType0", bSize=buffSize, zField = "Density",
-                zFieldUnit = "g/cm**2", cM = "algae",takeLog=1, zFieldLim = (1.5e-4,1e-1), zWidth=figWidth, fsize=fontSize,
-                wField=0, ovHalo=0, animate=0):
-        
-    if message != 0: log.logger.info(f"\n{message}")
-    # Option setup
-    axNum = 1
-    if twoAxis: axNum = 2
-
-    # Panel fig setup
-    panelSize = (axNum, len(simArr))
-    panelFig = plt.figure()
-    panelGrid = AxesGrid(panelFig,(0,0,1,1),nrows_ncols=panelSize,axes_pad=0.1,label_mode="1",share_all=True,cbar_location="right",cbar_mode="single",cbar_size="5%",cbar_pad="2%")
-
-    # Loading snapshots
-    snapArr  = [simArr[i].ytFull[idxArr[i]] for i in range(len(simArr))]
-    titleArr = [simArr[i].name              for i in range(len(simArr))]
-
-    # Start of the fig making
-    log.logger.info(f"  Setup complete - Starting fig making for {zField}")
-    for i,snap in enumerate(snapArr):
-        log.logger.info(f"  - Projecting {simArr[i].name} at time {simArr[i].snap[idxArr[i]].time:.1f} Myr Redshift {simArr[i].snap[idxArr[i]].z:.2f}")
-
-        # Sets plotting options as detailed
-        log.logger.debug(f"    Projecting in axis {axisProj[0]}")
-        if takeLog == 0: snap.field_info[(part, zField)].take_log = False
-        if wField != 0:
-            fig1 = yt.ProjectionPlot(snap, axisProj[0], (part, zField), window_size=plotSize, weight_field=(part,wField), fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen)
-        else:
-            if part=="PartType4":
-                fig1 = yt.ParticleProjectionPlot(snap, axisProj[0], (part, zField), window_size=plotSize, depth=(zWidth,"kpc"), fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen)
-            else:
-                fig1 = yt.ProjectionPlot(snap, axisProj[0], (part, zField), window_size=plotSize, fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen)
-        fig1.set_width(zWidth,"kpc")
-        if zFieldUnit != 0: fig1.set_unit((part, zField), zFieldUnit)
-        if zFieldLim != 0:  fig1.set_zlim((part, zField), zmin=zFieldLim[0], zmax=zFieldLim[1])
-        fig1.set_cmap(field=(part, zField), cmap=cM)
-        fig1.set_buff_size(bSize)
-        fig1.annotate_timestamp(redshift=True)
-
-        # Plots a second axis if specified
-        if twoAxis:
-            log.logger.debug(f"    Projecting in axis {axisProj[1]}")
-            if wField != 0:
-                fig2 = yt.ProjectionPlot(snap, axisProj[1], (part, zField), window_size=plotSize, weight_field=(part,wField), fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen) 
-            else:
-                if part=="PartType4":
-                    fig2 = yt.ParticleProjectionPlot(snap, axisProj[1], (part, zField), window_size=plotSize, depth=(zWidth,"kpc"), fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen)
-                else:
-                    fig2 = yt.ProjectionPlot(snap, axisProj[1], (part, zField), window_size=plotSize, fontsize=fsize, center=simArr[i].snap[idxArr[i]].ytcen)
-
-            fig2.set_width(zWidth,"kpc")
-            if zFieldUnit != 0: fig2.set_unit((part, zField), zFieldUnit)
-            if zFieldLim != 0:  fig2.set_zlim((part, zField), zmin=zFieldLim[0], zmax=zFieldLim[1])
-            fig2.set_cmap(field=(part, zField), cmap=cM)
-            fig2.set_buff_size(bSize)
-            fig2.annotate_timestamp(redshift=True)
-
-        # Transfers yt plot to plt axes and renders the figure
-        log.logger.debug(f"    Rendering {simArr[i].name}")
-        fullPlot = fig1.plots[part, zField]
-        fullPlot.figure = panelFig
-        fullPlot.axes = panelGrid[i].axes
-        fullPlot.cax = panelGrid.cbar_axes[i]
-
-        if twoAxis:
-            fullPlot2 = fig2.plots[part, zField]
-            fullPlot2.figure = panelFig
-            fullPlot2.axes = panelGrid[len(simArr)+i].axes
-            fullPlot2.cax = panelGrid.cbar_axes[len(simArr)+i]
-            fig2._setup_plots()
-
-        fig1._setup_plots()
-
-        # Overplot halos if prompted to and passed
-        if ovHalo != 0:
-            log.logger.debug("    Overplotting halos")
-            haloData = ovHalo[0][i].all_data()
-            haloFilt = ovHalo[1]
-            #log.logger.info(haloData['particle_position_x'][haloFilt[i]].in_units("kpc"))
-            #log.logger.info(simArr[i].snap[idxArr[i]].center[0],simArr[i].snap[idxArr[i]].center[1],simArr[i].snap[idxArr[i]].center[2])
-            xc = np.array(haloData['particle_position_x'][haloFilt[i]].in_units("kpc"))-simArr[i].snap[idxArr[i]].center[0]/1e3
-            yc = np.array(haloData['particle_position_y'][haloFilt[i]].in_units("kpc"))-simArr[i].snap[idxArr[i]].center[1]/1e3
-            zc = np.array(haloData['particle_position_z'][haloFilt[i]].in_units("kpc"))-simArr[i].snap[idxArr[i]].center[2]/1e3
-            rc = np.array(haloData['virial_radius'][haloFilt[i]].in_units("kpc"))*1e3
-            #log.logger.info(xc,yc,zc,rc)
-            for j in range(len(xc)):
-                panelGrid.axes_all[i].add_patch(plt.Circle((xc[j],yc[j]),rc[j],ec="r",fc="none"))
-                
-                if twoAxis:
-                    panelGrid.axes_all[len(simArr)+i].add_patch(plt.Circle((yc[j],zc[j]),rc[j],ec="r",fc="none"))
-
-        # Sets title
-        panelGrid.axes_all[i].set_title(titleArr[i])
-    
-    handleFig(panelFig,[showFig,animate,saveFig],message,saveFigPath,verbose)
-    
 # Plots phase space 2D histograms, defaults to gas phase (Density, Temperature, Mass)
 def ytPhasePanel(simArr, idxArr, depositionAlg="ngp", verbose=verboseLevel, plotSize=ytFigSize, saveFig=saveAll,
                  saveFigPath=0, showFig=showAll,message=0, blackLine=0, panOver=0, part = "PartType0", zLog=1,
