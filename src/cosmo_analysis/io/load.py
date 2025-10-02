@@ -1,6 +1,8 @@
-# TODO: Description of file for documentation
+"""I/O functions for loading simulation data.
 
-# TODO: Description of functions for documentation
+This module provides functions for loading simulation snapshots, particles,
+and calculating centers. It supports Gadget and AREPO simulation formats.
+"""
 
 from ..core import utils
 from ..core.sim_objs import *
@@ -14,6 +16,17 @@ import os
 
 # Gets data for multiple particles
 def getData(selector,field,parts,units = 0):
+    """Get data from multiple particle types.
+    
+    Args:
+        selector: YT data selector
+        field: Field name to retrieve
+        parts: List of particle types
+        units: Units to convert to (0 for no conversion)
+    
+    Returns:
+        np.ndarray: Concatenated data from all particle types
+    """
     results = []
     for part in parts:
         if units == 0:
@@ -24,6 +37,14 @@ def getData(selector,field,parts,units = 0):
 
 # Load particle list for one snapshot
 def loadParticles(sim,snapI,pI,typeP):
+    """Load particle data for a snapshot.
+    
+    Args:
+        sim: Simulation object
+        snapI: Snapshot index
+        pI: Particle list index
+        typeP: Particle type (e.g., 'PartType0')
+    """
     # Load general
     sim.snap[snapI].p[pI]    = particleList()
     sim.snap[snapI].p[pI].x  = np.array(sim.ytFull[snapI].r[typeP, "Coordinates"].to("pc")  )[:,0]-sim.snap[snapI].center[0]
@@ -44,26 +65,66 @@ def loadParticles(sim,snapI,pI,typeP):
             sim.snap[snapI].p[pI].mt = np.array(sim.ytFull[snapI].r[typeP, "Metallicity"])
 
 # Load center for one snapshot
-def loadCenters(sim,idx,overrideCenter=0,fun="3"):
-    methodDict = {"1":sim_prop.findCenter,"2":sim_prop.findCenter2,"3":sim_prop.findCenter3,"4":sim_prop.findCenter4,"5":sim_prop.findCenter5,"6":sim_prop.findCenter6,"7":sim_prop.findCenter7,"8":sim_prop.findCenter8}
+def loadCenters(sim, idx, overrideCenter=0, fun="3", projPath=None):
+    """Load and calculate the center for a snapshot.
+    
+    Args:
+        sim: Simulation object
+        idx: Snapshot index
+        overrideCenter: If 1, use domain center instead of calculation
+        fun: Centering method to use (numeric code "1"-"8" or strategy name)
+        projPath: Path to projection file (for methods 4 and 7)
+    """
+    from ..core.centering import get_centering_registry, get_strategy_name
+    
     if overrideCenter == 1:
         cen = sim.ytFull[idx].domain_center
         sim.snap[idx].center = np.array([cen[0].d,cen[1].d,cen[2].d])*1e3
     else:
-        cens = methodDict[fun](sim,idx)
+        # Convert legacy code to strategy name
+        strategy_name = get_strategy_name(fun)
+        
+        # Use centering registry
+        registry = get_centering_registry()
+        cens = registry.calculate_center(strategy_name, sim, idx, projPath=projPath)
+        
         sim.snap[idx].center = cens[0]
         sim.snap[idx].ytcen  = cens[1]
 
 # Default list with particle types (ideally this would automatically be figured out). Gas, DM and Stars
 defListPart = ["PartType0","PartType1","PartType4"]
-# Checks is particle types exist in a snapshot
+
 def getPtypes(sim,idx,defList):
+    """Check which particle types exist in a snapshot.
+    
+    Args:
+        sim: Simulation object
+        idx: Snapshot index
+        defList: Default list of particle types to check
+    
+    Returns:
+        list: List of particle types that exist in the snapshot
+    """
     # Heisenbug! (we force YT to load the particle types from the snapshots, without this it returns None)
     _ = sim.ytFull[idx].particle_type_counts
     return [part for part in defList if part in sim.ytFull[idx].particle_types]
 
 # Load one snapshot
-def loadSnapshot(cosmological,sim,idx,trueIdx,overrideCenter=0,loadAllP=0,verboseLvl=1,sameCenter=0,centerFun="6"):
+def loadSnapshot(cosmological,sim,idx,trueIdx,overrideCenter=0,loadAllP=0,verboseLvl=1,sameCenter=0,centerFun="6",projPath=None):
+    """Load a snapshot from the simulation.
+    
+    Args:
+        cosmological: Whether this is a cosmological simulation
+        sim: Simulation object
+        idx: Snapshot index
+        trueIdx: True file index
+        overrideCenter: If 1, use domain center
+        loadAllP: If 1, load all particle types
+        verboseLvl: Verbosity level
+        sameCenter: If provided, use this center instead of calculating
+        centerFun: Centering method to use ("1"-"8")
+        projPath: Path to projection file (for centering methods 4 and 7)
+    """
     # Initialize the snapshot struct
     a = 1
     z = 0
@@ -81,7 +142,7 @@ def loadSnapshot(cosmological,sim,idx,trueIdx,overrideCenter=0,loadAllP=0,verbos
     if sameCenter != 0:
         sim.snap[idx].center = np.array(sameCenter)
     else:
-        loadCenters(sim,idx,overrideCenter=overrideCenter,fun=centerFun)
+        loadCenters(sim,idx,overrideCenter=overrideCenter,fun=centerFun,projPath=projPath)
     log.logger.debug(f"    Center initialized at {sim.snap[idx].center} pc")
     log.logger.debug(f"    YT Center initialized at {sim.snap[idx].ytcen}")
 

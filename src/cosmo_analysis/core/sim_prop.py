@@ -1,3 +1,10 @@
+"""Simulation property calculations.
+
+This module provides functions for calculating physical properties of simulations,
+including various centering algorithms, virial radius calculations, and other
+snapshot-level properties.
+"""
+
 from .. import log
 from ..core import utils
 from ..io   import load
@@ -5,12 +12,18 @@ import numpy as np
 import unyt
 import yt
 
-# TODO: Description of file for documentation
-# TODO: Setup logging system
-# TODO: Description of functions for documentation
-
 # Calculate the actual center of a simulation snapshot
 def findCenter(sim, snapshotN, lim=20):
+    """Calculate center by finding maximum density particle.
+    
+    Args:
+        sim: Simulation object
+        snapshotN: Snapshot index
+        lim: Radius limit in kpc for initial sphere (default: 20)
+    
+    Returns:
+        tuple: (center_array in pc, center_unyt_array in kpc)
+    """
     snap   = sim.ytFull[snapshotN]
     cutOff = snap.sphere("center",(lim,"kpc"))
     den    = np.array(cutOff["PartType0", "Density"].to("Msun/pc**3"))
@@ -23,6 +36,16 @@ def findCenter(sim, snapshotN, lim=20):
 
 # Centering calc2 (center of mass)
 def findCenter2(sim, snapshotN, lim=20):
+    """Calculate center using gas center of mass.
+    
+    Args:
+        sim: Simulation object
+        snapshotN: Snapshot index
+        lim: Radius limit in kpc for initial sphere (default: 20)
+    
+    Returns:
+        tuple: (center_array in pc, center_unyt_array in kpc)
+    """
     snap   = sim.ytFull[snapshotN]
     cutOff = snap.sphere("center",(lim,"kpc"))
     cen    = cutOff.quantities.center_of_mass(use_gas=True, use_particles=False).in_units("pc")
@@ -30,6 +53,17 @@ def findCenter2(sim, snapshotN, lim=20):
 
 # Centering calc3 (like AGORA Paper)
 def findCenter3(sim, snapshotN):
+    """Calculate center using AGORA method for isolated simulations.
+    
+    Finds maximum density, refines with center of mass, then finds max density again.
+    
+    Args:
+        sim: Simulation object
+        snapshotN: Snapshot index
+    
+    Returns:
+        tuple: (center_array in pc, center_unyt_array in kpc)
+    """
     snap      = sim.ytFull[snapshotN]
 
     v, cen1   = snap.find_max(("gas", "density"))
@@ -42,9 +76,26 @@ def findCenter3(sim, snapshotN):
     return (center,center/1e3*unyt.kpc)
 
 # Centering calc4 (like AGORA Paper, for CosmoRun)
-def findCenter4(sim, idx):
-    snap     = sim.ytFull[idx]
-    projPath = "../../../outputlist_projection.txt" # TODO: Do this correctly
+def findCenter4(sim, idx, projPath=None):
+    """Calculate center using AGORA method for cosmological runs.
+    
+    Args:
+        sim: Simulation object
+        idx: Snapshot index
+        projPath: Path to projection file. If None, uses config value.
+    
+    Returns:
+        tuple: (center_array, center_unyt_array)
+    """
+    from ..config import get_config
+    
+    snap = sim.ytFull[idx]
+    
+    # Get projection path from config if not provided
+    if projPath is None:
+        config = get_config()
+        projPath = config.get('paths.data_files.projection_list', 'outputlist_projection.txt')
+    
     f        = np.loadtxt(projPath,skiprows=4)
     idx0     = utils.getClosestIdx(f[:,0],0.99999) # Finds end of first projection
     tIdx     = utils.getClosestIdx(f[0:idx0,1],sim.snap[idx].a)
@@ -65,6 +116,17 @@ def findCenter4(sim, idx):
 
 # Centering calc5 (AGORA code shortcut, for isolated)
 def findCenter5(sim, snapshotN):
+    """Calculate center using hardcoded AGORA coordinates.
+    
+    Uses a specific center position from AGORA simulations.
+    
+    Args:
+        sim: Simulation object
+        snapshotN: Snapshot index
+    
+    Returns:
+        tuple: (center_array in pc, center_unyt_array in kpc)
+    """
     snap   = sim.ytFull[snapshotN]
     cen    = snap.arr([6.184520935812296e+21, 4.972678132728082e+21, 6.559067311284074e+21], 'cm')
     cen    = cen.to("pc")
@@ -73,15 +135,40 @@ def findCenter5(sim, snapshotN):
 
 # Centering calc6 (just 0 0 0)
 def findCenter6(sim, snapshotN):
+    """Calculate center at origin (0,0,0).
+    
+    Args:
+        sim: Simulation object
+        snapshotN: Snapshot index
+    
+    Returns:
+        tuple: (center_array in pc, center_unyt_array in kpc)
+    """
     cen    = np.array([0,0,0])
     return (cen,cen/1e3*unyt.kpc)
 
 # Centering calc7 (like 4, but expanded in scope)
-def findCenter7(sim, idx):
-    snap     = sim.ytFull[idx]
-    projPath = "/sqfs/work/hp240141/z6b616/cosmo_analysis/outputlist_projection.txt" # TODO: Do this correctly
-    log.logger.debug("Is this working?")
-    log.logger.debug(projPath)
+def findCenter7(sim, idx, projPath=None):
+    """Calculate center using expanded AGORA method.
+    
+    Args:
+        sim: Simulation object
+        idx: Snapshot index
+        projPath: Path to projection file. If None, uses config value.
+    
+    Returns:
+        tuple: (center_array, center_unyt_array)
+    """
+    from ..config import get_config
+    
+    snap = sim.ytFull[idx]
+    
+    # Get projection path from config if not provided
+    if projPath is None:
+        config = get_config()
+        projPath = config.get('paths.data_files.projection_list', 'outputlist_projection.txt')
+    
+    log.logger.debug("Loading projection file from: %s", projPath)
 
     f        = np.loadtxt(projPath,skiprows=4)
     idx0     = utils.getClosestIdx(f[:,0],0.99999) # Finds end of first projection
@@ -107,6 +194,18 @@ def findCenter7(sim, idx):
 
 # Centering calc8 (like 4, for any box)
 def findCenter8(sim, idx):
+    """Calculate center using iterative shrinking sphere method.
+    
+    Starts from box center and iteratively refines using particle center of mass
+    with progressively smaller spheres.
+    
+    Args:
+        sim: Simulation object
+        idx: Snapshot index
+    
+    Returns:
+        tuple: (center_array in code units, center_unyt_array in code_length)
+    """
     snap     = sim.ytFull[idx]
 
     boxSize = snap.parameters['BoxSize']
