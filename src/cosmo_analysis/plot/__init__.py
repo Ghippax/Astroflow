@@ -21,6 +21,7 @@ For backward compatibility, import from plots:
 from . import base
 from . import projection
 from . import phase
+from . import profiles
 from . import utils
 from . import plots
 
@@ -28,6 +29,7 @@ __all__ = [
     'base',
     'projection',
     'phase',
+    'profiles',
     'utils',
     'plots',
 ]
