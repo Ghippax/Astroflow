@@ -1,10 +1,12 @@
 # Cosmo Analysis Examples
 
-This directory contains example scripts demonstrating how to use cosmo_analysis.
+This directory contains example scripts and notebooks demonstrating how to use cosmo_analysis.
 
 ## Available Examples
 
-### basic_usage.py
+### Python Scripts
+
+#### basic_usage.py
 
 Demonstrates the new YAML configuration system:
 - Loading configuration
@@ -16,6 +18,24 @@ Run it:
 ```bash
 python examples/basic_usage.py
 ```
+
+### Jupyter Notebooks
+
+#### 01_workflow_basics.ipynb
+
+Introduction to the workflow system:
+- Exploring standard workflows
+- Creating custom workflows
+- Validating and running workflows
+- YAML workflow definitions
+
+#### 02_centering_strategies.ipynb
+
+Guide to centering strategies:
+- Available centering methods
+- Choosing the right strategy
+- Legacy code compatibility
+- Configuration options
 
 ## Running Examples
 
