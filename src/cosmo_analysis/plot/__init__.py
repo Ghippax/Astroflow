@@ -22,6 +22,9 @@ from . import base
 from . import projection
 from . import phase
 from . import profiles
+from . import halo
+from . import star_formation
+from . import galaxy
 from . import utils
 from . import plots
 
@@ -30,6 +33,9 @@ __all__ = [
     'projection',
     'phase',
     'profiles',
+    'halo',
+    'star_formation',
+    'galaxy',
     'utils',
     'plots',
 ]

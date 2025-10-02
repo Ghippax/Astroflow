@@ -234,3 +234,109 @@ Planned additions:
 - `galaxy.py` - Galaxy property plotting
 
 These will be extracted from the remaining functions in `plots.py` following the same pattern.
+
+### `profiles.py` - Profile and Rotation Curve Plotting
+
+Functions for radial profiles and velocity dispersion analysis:
+
+- **`plotBinned()`** - General binned field profiles with error analysis
+- **`plotRotDisp()`** - Velocity dispersion and rotation curves
+
+**Example:**
+```python
+from cosmo_analysis.plot.profiles import plotBinned
+
+# Plot density profile with error bars
+plotBinned(
+    sims=[sim1, sim2],
+    idx=[0, 0],
+    binFields=["particle_position_spherical_radius", "Density"],
+    nBins=50,
+    rLim=(0.1, 20),
+    showError=1,
+    message="density_profile"
+)
+```
+
+### `halo.py` - Halo Finding and Analysis
+
+Functions for halo identification and mass function analysis:
+
+- **`findHalos()`** - Find halos using FOF or HOP methods
+- **`plotClumpMassF()`** - Plot cumulative halo mass function
+
+**Example:**
+```python
+from cosmo_analysis.plot.halo import findHalos, plotClumpMassF
+
+# Find halos
+halo_data = findHalos(
+    simArr=[sim1, sim2],
+    idxArr=[0, 0],
+    partT='PartType1',
+    mainPath='/path/to/output',
+    haloMethod='fof'
+)
+
+# Plot mass function
+plotClumpMassF(sims, idx, halo_data, message="halo_mass_function")
+```
+
+### `star_formation.py` - Star Formation Analysis
+
+Functions for star formation rate and Kennicutt-Schmidt relations:
+
+- **`plotSFR()`** - Star formation rate over time
+- **`plotKScil()`** - Kennicutt-Schmidt relation (cylindrical binning)
+- **`plotKSmock()`** - Kennicutt-Schmidt with mock observations
+- **`plotSFmass()`** - Stellar mass buildup over time
+
+**Example:**
+```python
+from cosmo_analysis.plot.star_formation import plotSFR, plotKScil
+
+# Plot SFR history
+plotSFR(sims, idx, tLim=(0, 1000), message="sfr_history")
+
+# Plot Kennicutt-Schmidt relation
+plotKScil(sims, idx, rLim=15, nBins=20, message="ks_relation")
+```
+
+### `galaxy.py` - Galaxy Property Correlations
+
+Functions for galaxy-scale property relationships:
+
+- **`plotMsMh()`** - Stellar mass vs halo mass relation
+
+**Example:**
+```python
+from cosmo_analysis.plot.galaxy import plotMsMh
+from cosmo_analysis.plot.halo import findHalos
+
+# First find halos
+halo_data = findHalos(simArr, idxArr, 'PartType1', mainPath)
+
+# Plot M*-Mh relation
+plotMsMh(sims, idx, halo_data, rLim=15, message="stellar_halo_mass")
+```
+
+## Refactoring Status
+
+**✅ All modules refactored with config support (100% complete)**
+
+All 8 modules have been successfully refactored:
+1. ✅ base.py - Core utilities
+2. ✅ projection.py - Projection plotting
+3. ✅ phase.py - Phase space plotting
+4. ✅ profiles.py - Profile and rotation curves
+5. ✅ halo.py - Halo finding and analysis
+6. ✅ star_formation.py - Star formation plotting
+7. ✅ galaxy.py - Galaxy properties
+8. ✅ utils.py - Helper functions
+
+All functions use the configuration system for:
+- Output paths and file handling
+- Plotting defaults (DPI, figure sizes, save/show behavior)
+- Particle types and field names
+- Analysis parameters
+
