@@ -20,12 +20,14 @@ For backward compatibility, import from plots:
 # Re-export main modules for convenience
 from . import base
 from . import projection
+from . import phase
 from . import utils
 from . import plots
 
 __all__ = [
     'base',
-    'projection', 
+    'projection',
+    'phase',
     'utils',
     'plots',
 ]

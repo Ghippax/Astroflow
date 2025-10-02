@@ -31,6 +31,7 @@ from .. import log
 # Import from new modular structure
 from .base import saveFrame, setLegend, handleFig
 from .projection import ytMultiPanel, ytProjPanel
+from .phase import ytPhasePanel
 from .utils import (makeMovie, binFunctionCilBins, binFunctionSphBins, 
                    binFunctionCilBinsSFR, makeZbinFun, binFunctionSphVol, aFromT)
 
@@ -38,102 +39,6 @@ yt.set_log_level(0)
 
 # Legacy global - kept for backward compatibility, use config instead
 savePath = "/sqfs/work/hp240141/z6b616/analysis"
-
-# Plots phase space 2D histograms, defaults to gas phase (Density, Temperature, Mass)
-def ytPhasePanel(simArr, idxArr, depositionAlg="ngp", verbose=verboseLevel, plotSize=ytFigSize, saveFig=saveAll,
-                 saveFigPath=0, showFig=showAll,message=0, blackLine=0, panOver=0, part = "PartType0", zLog=1,
-                 zFields = ["Density","Temperature","Masses"], zFieldUnits = ["g/cm**3","K","Msun"], cM = "algae", animate = 0,
-                 zFieldLim = (1e3,1e8,1e-29,1e-21,10,1e7), zWidth=15, fsize=12, wField=0, xb=300, yb=300, grid=True, axAspect = 1):
-    if message != 0: log.logger.info(f"\n{message}")
-    # Panel fig setup
-    if isinstance(wField,list) == False: wField = [wField]*len(simArr)
-    if panOver == 0:
-        panelSize = (1, math.ceil(len(simArr)))
-    else:
-        panelSize = panOver
-    panelFig = plt.figure(figsize=(1,1))
-    panelGrid = AxesGrid(panelFig,(0,0,0.4*panelSize[1],0.4*panelSize[0]),aspect=False,nrows_ncols=panelSize,axes_pad=0.1,
-                         label_mode="1",share_all=True,cbar_location="right",cbar_mode="single",cbar_size="5%",cbar_pad="2%")
-    
-    if zFieldLim   == 0: zFieldLim   = [0,0,0,0,0,0]
-    if zFieldUnits == 0: zFieldUnits = [0,0,0]
-
-    # Loading snapshots
-    snapArr  = [simArr[i].ytFull[idxArr[i]] for i in range(len(simArr))]
-    titleArr = [simArr[i].name              for i in range(len(simArr))]
-
-    # Getting the black line
-    if blackLine:
-        log.logger.debug(f"  Calculating avg profile with {simArr[0].name}")
-        sp = snapArr[0].sphere(simArr[0].snap[idxArr[0]].ytcen,(zWidth,"kpc"))
-
-        p1 = yt.ProfilePlot(sp,(part,zFields[0]),(part,zFields[1]),weight_field=(part,zFields[2]), n_bins=30, x_log=False, accumulation=False)
-        
-        p1.set_log((part,zFields[0]),True)
-        p1.set_log((part,zFields[1]),True)
-
-        if zFieldUnits[0] != 0: p1.set_unit((part,zFields[0]), zFieldUnits[0])
-        if zFieldLim[2] != 0 or zFieldLim[3] != 0: p1.set_xlim(zFieldLim[2], zFieldLim[3])
-        if zFieldUnits[1] != 0: p1.set_unit((part,zFields[1]), zFieldUnits[1])
-
-        cil = p1.profiles[0].x.in_units(zFieldUnits[0]).d
-        bin = p1.profiles[0][zFields[1]].in_units(zFieldUnits[1]).d
-        goodbin = []
-        goodcil = []
-        for i in range(len(bin)):
-            if abs(bin[i]) > 1e-33:
-                goodbin.append(bin[i]) 
-                goodcil.append(cil[i])
-           
-    # Start of the fig making
-    for i,snap in enumerate(snapArr):
-        log.logger.info(f"  - Plotting {simArr[i].name}")
-        sp = snap.sphere(simArr[i].snap[idxArr[i]].ytcen,(zWidth,"kpc"))
-        # Plot phase with specified parameters
-        if zLog != 1:
-            snap.field_info[(part, zFields[2])].take_log = False
-        
-        if wField[i] != 0:
-            fig1 = yt.ParticlePhasePlot(sp,  (part, zFields[0]),(part, zFields[1]),(part, zFields[2]), deposition=depositionAlg,
-                                         figure_size=plotSize, weight_field=(part,wField[i]), fontsize=fsize, x_bins=xb, y_bins=yb)
-        else:
-            fig1 = yt.ParticlePhasePlot(sp,  (part, zFields[0]),(part, zFields[1]),(part, zFields[2]), deposition=depositionAlg,
-                                         figure_size=plotSize, fontsize=fsize, x_bins=xb, y_bins=yb)
-            
-        
-        if zFieldUnits[0] != 0: fig1.set_unit((part, zFields[0]), zFieldUnits[0])
-        if zFieldUnits[1] != 0: fig1.set_unit((part, zFields[1]), zFieldUnits[1])
-        if zFieldUnits[2] != 0: fig1.set_unit((part, zFields[2]), zFieldUnits[2])
-            
-        if zFieldLim[0] != 0 or zFieldLim[1] != 0: fig1.set_zlim((part, zFields[2]), zmin=zFieldLim[0], zmax=zFieldLim[1])
-        if zFieldLim[2] != 0 or zFieldLim[3] != 0: fig1.set_xlim(zFieldLim[2], zFieldLim[3])
-        if zFieldLim[4] != 0 or zFieldLim[5] != 0: fig1.set_ylim(zFieldLim[4], zFieldLim[5])
-
-        fig1.set_log((part,zFields[2]),bool(zLog))
-
-        fig1.set_cmap(field=(part, zFields[2]), cmap=cM)
-
-        #fig1.annotate_text(0,0,"t="+str(round(sims[i].snap[idx[i]].time))+" Myr\n z="+str(round(sims[i].snap[idx[i]].z,2)))
-
-        # Transfers yt plot to plt axes and renders the figure
-        log.logger.debug(f"    Rendering {simArr[i].name}")
-        fullPlot = fig1.plots[part, zFields[2]]
-        fullPlot.figure = panelFig
-        fullPlot.axes = panelGrid[i].axes
-        if i == 0:
-            fullPlot.cax = panelGrid.cbar_axes[i]
-        
-        fig1._setup_plots()
-
-        if blackLine:
-            panelGrid.axes_all[i].plot(goodcil,goodbin,"k--")
-        panelFig.canvas.draw()
-        if grid: panelGrid.axes_all[i].grid()
-        panelGrid.axes_all[i].set_title(titleArr[i])
-        panelGrid.axes_all[i].set_box_aspect(axAspect)
-        #panelGrid.axes_all[i].set_aspect(axAspect)
-        
-    handleFig(panelFig,[showFig,animate,saveFig],message,saveFigPath,verbose)
 
 # Plots a binned field
 def plotBinned(sims,idx,binFields,nBins,rLim,logOverload=0,legOverload=0,diffSims=0,blLine=0,wField=0,spLim=0,binFunction=0,part=gasPart,setUnits=0,setLogs=(False,True),ylims=0,xlims=0,animate=0,
