@@ -42,6 +42,9 @@ class TestPlotMsMh:
         config = Config.load_config()
         Config.set_instance(config)
         
+        # Use deterministic seed
+        np.random.seed(42)
+        
         # Create mock simulation
         mock_sim = Mock()
         mock_sim.name = "TestGalaxy"
@@ -56,23 +59,60 @@ class TestPlotMsMh:
         mock_ds = MagicMock()
         mock_sim.ytFull = [mock_ds]
         
-        # Create mock halo data
-        mock_halo = Mock()
-        mock_halo.halos_ds = Mock()
-        mock_halo.halos_ds.halo_mass = Mock()
-        mock_halo.halos_ds.halo_mass.to_ndarray.return_value = np.array([1e11, 5e11, 1e12])
+        # Create mock halo data - plotMsMh expects haloData = (haloSims, haloFilt)
+        mock_halo_ds = Mock()
+        halo_masses = np.array([1e11, 5e11, 1e12])
         
-        try:
-            fig = plotMsMh([mock_sim], [0], [mock_halo], rLim=10.0, 
-                          showFig=False, saveFig=False)
+        # Mock all_data() which returns data with particle_mass field
+        mock_all_data = {}
+        
+        # Create a mock mass field that supports subscripting
+        class MockMassField:
+            def __init__(self, masses):
+                self._masses = masses
             
-            if fig is not None:
-                assert hasattr(fig, 'get_axes'), "Should return a matplotlib figure"
-                axes = fig.get_axes()
-                assert len(axes) > 0, "Figure should have at least one axis"
-                plt.close(fig)
-        except Exception as e:
-            pytest.skip(f"Requires specific yt halo and particle data: {e}")
+            def __getitem__(self, key):
+                result = Mock()
+                if isinstance(key, np.ndarray) and key.dtype == bool:
+                    filtered = self._masses[key]
+                else:
+                    filtered = self._masses
+                result.in_units = Mock(return_value=Mock(d=filtered))
+                return result
+        
+        mock_all_data['particle_mass'] = MockMassField(halo_masses)
+        mock_halo_ds.all_data.return_value = mock_all_data
+        
+        # haloFilt is a boolean mask or None
+        halo_filt = np.ones(3, dtype=bool)
+        
+        # haloData is a tuple of (haloSims list, haloFilt list)
+        haloData = ([mock_halo_ds], [halo_filt])
+        
+        # Mock star particle data in sphere
+        mock_sphere = MagicMock()
+        part_type = config.get('simulation_parameters.particle_types.star', 'PartType4')
+        star_masses = np.random.uniform(1e3, 1e5, 50)
+        
+        mock_star_mass = Mock()
+        mock_star_mass.in_units.return_value = Mock(d=star_masses)
+        mock_star_mass.sum.return_value = Mock(in_units=lambda u: Mock(d=np.sum(star_masses)))
+        
+        def mock_getitem(key):
+            if 'Masses' in str(key):
+                return mock_star_mass
+            return MagicMock()
+        
+        mock_sphere.__getitem__ = mock_getitem
+        mock_ds.sphere.return_value = mock_sphere
+        
+        # Use animate=True to get the frame returned for validation
+        frame = plotMsMh([mock_sim], [0], haloData, rLim=10.0, 
+                        showFig=False, saveFig=False, animate=True)
+        
+        assert frame is not None, "plotMsMh with animate=True should return a frame"
+        assert isinstance(frame, np.ndarray), "Frame should be a numpy array"
+        assert len(frame.shape) == 3, "Frame should be a 3D array (height, width, channels)"
 
 
 class TestVisualRegression:
@@ -101,28 +141,59 @@ class TestVisualRegression:
         mock_sim.ytFull = [mock_ds]
         
         # Mock halo masses (log-normal distribution)
-        mock_halo = Mock()
-        mock_halo.halos_ds = Mock()
+        mock_halo_ds = Mock()
         halo_masses = 10 ** np.random.normal(11.5, 0.5, 50)
-        mock_halo.halos_ds.halo_mass = Mock()
-        mock_halo.halos_ds.halo_mass.to_ndarray.return_value = halo_masses
         
-        try:
-            fig = plotMsMh([mock_sim], [0], [mock_halo], rLim=10.0,
-                          showFig=False, saveFig=False)
+        # Mock all_data() which returns data with particle_mass field
+        mock_all_data = {}
+        
+        # Create a mock mass field that supports subscripting
+        class MockMassField:
+            def __init__(self, masses):
+                self._masses = masses
             
-            if fig is not None:
-                axes = fig.get_axes()
-                assert len(axes) > 0, "Plot should have axes"
-                
-                # Check that axes have labels (common for M_star-M_halo plots)
-                ax = axes[0]
-                assert ax.get_xlabel() or ax.get_ylabel(), \
-                    "Axes should have labels"
-                
-                plt.close(fig)
-        except Exception as e:
-            pytest.skip(f"Requires yt integration: {e}")
+            def __getitem__(self, key):
+                result = Mock()
+                if isinstance(key, np.ndarray) and key.dtype == bool:
+                    filtered = self._masses[key]
+                else:
+                    filtered = self._masses
+                result.in_units = Mock(return_value=Mock(d=filtered))
+                return result
+        
+        mock_all_data['particle_mass'] = MockMassField(halo_masses)
+        mock_halo_ds.all_data.return_value = mock_all_data
+        
+        # haloFilt is a boolean mask
+        halo_filt = np.ones(50, dtype=bool)
+        
+        # haloData is a tuple
+        haloData = ([mock_halo_ds], [halo_filt])
+        
+        # Mock stellar masses
+        mock_sphere = MagicMock()
+        part_type = config.get('simulation_parameters.particle_types.star', 'PartType4')
+        stellar_masses = 10 ** np.random.normal(9.5, 0.8, 50)
+        
+        mock_star_mass = Mock()
+        mock_star_mass.in_units.return_value = Mock(d=stellar_masses)
+        mock_star_mass.sum.return_value = Mock(in_units=lambda u: Mock(d=np.sum(stellar_masses)))
+        
+        def mock_getitem(key):
+            if 'Masses' in str(key):
+                return mock_star_mass
+            return MagicMock()
+        
+        mock_sphere.__getitem__ = mock_getitem
+        mock_ds.sphere.return_value = mock_sphere
+        
+        # Use animate=True to get the frame returned for validation
+        frame = plotMsMh([mock_sim], [0], haloData, rLim=10.0,
+                        showFig=False, saveFig=False, animate=True)
+        
+        assert frame is not None, "plotMsMh with animate=True should return a frame"
+        assert isinstance(frame, np.ndarray), "Frame should be a numpy array"
+        assert len(frame.shape) == 3, "Frame should be a 3D array (height, width, channels)"
     
     @pytest.mark.visual
     def test_msmh_consistency_multiple_runs(self, reset_config):

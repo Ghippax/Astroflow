@@ -97,7 +97,7 @@ def plotSFR(sims, idx, tLim=None, titlePlot=0, verbose=None, plotSize=None,
         uAx.set_ylim(ylims[0], ylims[1])
     
     uAx.set_xlabel("Time (Myr)")
-    uAx.set_ylabel(r"SFR ($\\frac{\mathrm{M}_{\odot}}{yr}$)")
+    uAx.set_ylabel(r"SFR ($\mathrm{M}_{\odot}/\mathrm{yr}$)")
     if titlePlot != 0:
         uAx.set_title(titlePlot)
     uAx.grid()

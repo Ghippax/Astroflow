@@ -95,6 +95,9 @@ class TestVisualRegression:
         config = Config.load_config()
         Config.set_instance(config)
         
+        # Use deterministic seed for reproducibility
+        np.random.seed(42)
+        
         # Create realistic mock data
         mock_sim = Mock()
         mock_sim.name = "HaloSim"
@@ -106,30 +109,50 @@ class TestVisualRegression:
         mock_sim.snap = [snap]
         
         # Create mock halo data with realistic mass distribution
-        mock_halo = Mock()
-        mock_halo.halos_ds = Mock()
-        # Log-normal mass distribution
-        masses = 10 ** np.random.normal(10.5, 1.0, 100)
-        mock_halo.halos_ds.halo_mass = Mock()
-        mock_halo.halos_ds.halo_mass.to_ndarray.return_value = masses
+        # plotClumpMassF expects haloData = (haloSims, haloFilt)
+        mock_halo_ds = Mock()
         
-        try:
-            fig = plotClumpMassF([mock_sim], [0], [mock_halo], showFig=False, saveFig=False)
+        # Log-normal mass distribution - typical for halo mass functions
+        masses = 10 ** np.random.normal(10.5, 1.0, 100)
+        
+        # Mock all_data() which returns data object with particle_mass field
+        mock_all_data = {}
+        
+        # Create a mock mass field that supports subscripting with boolean array
+        class MockMassField:
+            def __init__(self, masses):
+                self._masses = masses
             
-            if fig is not None:
-                # Verify plot has axes and content
-                axes = fig.get_axes()
-                assert len(axes) > 0, "Plot should have at least one axis"
-                
-                # Verify axes have data plotted
-                ax = axes[0]
-                assert len(ax.lines) > 0 or len(ax.collections) > 0, \
-                    "Plot should have lines or collections"
-                
-                plt.close(fig)
-        except Exception as e:
-            # Document what types of errors are acceptable
-            pytest.skip(f"Requires specific yt halo data structure: {e}")
+            def __getitem__(self, key):
+                result = Mock()
+                if isinstance(key, np.ndarray) and key.dtype == bool:
+                    filtered = self._masses[key]
+                else:
+                    filtered = self._masses
+                result.in_units = Mock(return_value=Mock(d=filtered))
+                return result
+            
+            def in_units(self, unit):
+                return Mock(d=self._masses)
+        
+        mock_all_data['particle_mass'] = MockMassField(masses)
+        mock_halo_ds.all_data.return_value = mock_all_data
+        
+        # haloFilt is a boolean mask or None
+        halo_filt = np.ones(100, dtype=bool)  # All halos pass the filter
+        
+        # haloData is a tuple of (haloSims list, haloFilt list)
+        haloData = ([mock_halo_ds], [halo_filt])
+        
+        # Use animate=True to get the figure returned for validation
+        frame = plotClumpMassF([mock_sim], [0], haloData, showFig=False, saveFig=False, animate=True)
+        
+        assert frame is not None, "plotClumpMassF with animate=True should return a frame"
+        assert isinstance(frame, np.ndarray), "Frame should be a numpy array"
+        assert len(frame.shape) == 3, "Frame should be a 3D array (height, width, channels)"
+        
+        # Verify reasonable image dimensions
+        assert frame.shape[0] > 0 and frame.shape[1] > 0, "Frame should have positive dimensions"
 
 
 class TestConfigIntegration:
