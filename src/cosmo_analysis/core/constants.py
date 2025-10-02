@@ -1,13 +1,28 @@
 """Constants and default configuration values for cosmo_analysis.
 
-This module is being gradually deprecated in favor of the new config.py system.
+DEPRECATED: This module is deprecated in favor of the config.py system.
 It remains for backward compatibility but should not be used for new code.
 
-TODO: Migrate all hardcoded constants to config.yaml
+Please use the configuration system instead:
+    from cosmo_analysis.config import get_config
+    config = get_config()
+    value = config.get('key.path', default_value)
+
+See config_template.yaml for available configuration options.
 """
 
+import warnings
 import copy
 import matplotlib.pyplot as plt
+
+# Issue deprecation warning on import
+warnings.warn(
+    "The constants module is deprecated and will be removed in a future version. "
+    "Please use the configuration system from cosmo_analysis.config instead. "
+    "See config_template.yaml for available options.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 ## OPTIONS
 # Figure options
