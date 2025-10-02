@@ -1,0 +1,137 @@
+# Workflow Template for Cosmo Analysis
+#
+# This file defines analysis workflows that can be executed on simulation data.
+# Each workflow consists of a series of plots with their configuration.
+#
+# To use: Copy this to 'workflows.yaml' and customize for your analysis needs.
+
+workflows:
+  # Basic comparison workflow - simple plots for quick analysis
+  basic_comparison:
+    description: "Basic multi-simulation comparison plots"
+    plots:
+      - type: projection
+        field: Density
+        axes: [0, 1]
+        colormap: "algae"
+        width: 30  # kpc
+      
+      - type: phase
+        x_field: Density
+        y_field: Temperature
+        weight_field: Masses
+        limits:
+          x: [1e-29, 1e-21]
+          y: [1e1, 1e7]
+      
+      - type: profile
+        x_field: particle_position_cylindrical_radius
+        y_field: Masses
+        bins: 50
+        x_range: [0, 15]
+  
+  # Detailed gas analysis workflow
+  detailed_gas:
+    description: "Comprehensive gas property analysis"
+    plots:
+      - type: density_projection
+        width: 30
+        colormap: "algae"
+      
+      - type: temperature_projection
+        width: 30
+        colormap: "hot"
+      
+      - type: metallicity_map
+        width: 30
+        colormap: "viridis"
+      
+      - type: rotation_curve
+        max_radius: 15
+        bins: 50
+      
+      - type: velocity_dispersion
+        max_radius: 15
+        bins: 50
+  
+  # Star formation analysis
+  star_formation:
+    description: "Star formation history and properties"
+    plots:
+      - type: sfr_history
+        time_range: [0, 1000]
+        bins: 50
+      
+      - type: ks_relation
+        radius_limit: 15
+        bins: 50
+      
+      - type: stellar_mass_distribution
+        radius_range: [0, 15]
+      
+      - type: metallicity_distribution
+        bins: 50
+        range: [0.001, 0.1]
+  
+  # NSFF Analysis (AGORA Paper II workflow)
+  nsff_analysis:
+    description: "NSFF analysis from AGORA collaboration Paper II"
+    plots:
+      - type: surface_density_radial
+        radius_range: [0, 15]
+        bins: 50
+        title: "Cylindrically binned surface density"
+      
+      - type: surface_density_vertical
+        height_range: [0.001, 1.4]
+        bins: 10
+        title: "Vertically binned surface density"
+      
+      - type: average_height
+        radius_range: [0, 15]
+        bins: 50
+        title: "Average cylindrical vertical height"
+      
+      - type: velocity_profile
+        radius_range: [0, 15]
+        bins: 50
+        title: "Velocity profile"
+      
+      - type: velocity_dispersion
+        radius_range: [0, 15]
+        bins: 50
+        title: "Velocity dispersion profile"
+      
+      - type: density_pdf
+        density_range: [1e-29, 1e-21]
+        bins: 50
+        title: "Gas Density PDF"
+      
+      - type: temperature_pdf
+        temp_range: [1e1, 1e7]
+        bins: 50
+        title: "Gas Temperature PDF"
+      
+      # Optional plots (only if SmoothingLength available)
+      - type: smoothing_length_radial
+        radius_range: [0, 15]
+        bins: 50
+        optional: true
+        require_field: "SmoothingLength"
+      
+      - type: smoothing_length_density
+        density_range: [1e-29, 1e-20]
+        bins: 50
+        optional: true
+        require_field: "SmoothingLength"
+
+  # Custom workflow template - copy and modify this
+  custom_template:
+    description: "Template for creating custom workflows"
+    plots:
+      # Add your plots here
+      # Available types: projection, phase, profile, density_pdf, etc.
+      # See documentation for full list of plot types and parameters
+      - type: projection
+        field: Density
+        # Add parameters specific to this plot type
