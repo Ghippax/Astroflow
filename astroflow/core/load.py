@@ -2,12 +2,13 @@
 
 import yt
 
-from .sim_metadata import sim_metadata
+from .registries import sim_metadata
 from .simulation import Simulation
 
 
 def load(
-    unique_name: str | None = None, path: str | None = None, **kwargs
+    unique_name: str | None = None, path: str | None = None, force_reg
+      = False, force_derived_comp = False, **kwargs
 ) -> Simulation:
     """Return a :class:`Simulation` instance for the requested dataset.
 
@@ -43,14 +44,14 @@ def load(
     # Figure out name and register (we register first to check for duplicates)
     dataset_name = type(ts[0]).__name__
 
-    if not in_registry:
-        sim_metadata.register_sim(Simulation(ts, path, unique_name, dataset_name))
+    if not in_registry or force_reg:
+        unique_name = sim_metadata.register_sim(path, unique_name, dataset_name, force_reg=force_reg)
 
     # Create the final Simulation object
     sim = Simulation(ts, path, unique_name, dataset_name)
 
     # Load additional fields
-    sim.setup_snapshots()
+    sim.setup_snapshots(force_comp=force_derived_comp)
     sim.add_fields()
 
     return sim

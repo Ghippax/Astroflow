@@ -1,9 +1,7 @@
 from datetime import datetime
 from pathlib import Path
-
 from functools import wraps
-from typing import Callable, Dict, Tuple, Any
-
+from typing import Callable, Dict
 import yaml
 
 """Metadata management for simulations."""
@@ -24,29 +22,29 @@ class SimulationMetadata:
         with self.path.open("w") as f:
             yaml.safe_dump(self.data, f)
 
-    def register_sim(self, sim):
+    def register_sim(self, path, name, code_name, force_reg = False):
         # Generate a name if not provided
-        if sim.name is None:
+        if name is None:
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            base_name = f"{sim.code_name}-{timestamp}"
+            base_name = f"{code_name}-{timestamp}"
             # Ensure uniqueness
             counter = 1
-            sim.name = base_name
-            while sim.name in self.data:
-                sim.name = f"{base_name}-{counter}"
+            name = base_name
+            while name in self.data:
+                name = f"{base_name}-{counter}"
                 counter += 1
 
-        if sim.name in self.data:
-            raise ValueError(f"Simulation '{sim.name}' already exists in {self.path}")
+        if name in self.data and not force_reg:
+            raise ValueError(f"Simulation '{name}' already exists in {self.path}. Consider using force_reg = True to overwrite")
         entry = {
-            "path": str(sim.path),
-            "type": sim.code_name,
+            "path": str(path),
+            "type": code_name,
             "created_at": datetime.now().isoformat(),
             "snapshots": {},
         }
-        self.data[sim.name] = entry
+        self.data[name] = entry
         self.save()
-        return sim.name
+        return name
 
     def get(self, name):
         if name not in self.data:
@@ -55,7 +53,6 @@ class SimulationMetadata:
 
     def list(self):
         return list(self.data.keys())
-
 
 """Registry for derived property calculation methods."""
 
@@ -79,14 +76,7 @@ class DerivedPropRegistry:
     def all(self):
         return {k: v for k, v in self._reg.items()}
 
-    def compute(
-        self,
-        name: str,
-        sim_obj,
-        snap_id: str,
-        params: dict | None = None,
-        force: bool = False,
-    ) -> Tuple[Any, dict]:
+    def compute(self, name, sim_obj, snap_id: int, params: dict | None = None):
         """
         Run method `name` for sim_obj and snapshot snap_id.
         Responsible only for executing the function; caller handles metadata writes.
@@ -101,4 +91,4 @@ class DerivedPropRegistry:
 
 sim_metadata = SimulationMetadata()
 
-derived_prop = DerivedPropRegistry()
+derived_registry = DerivedPropRegistry()
