@@ -1,14 +1,27 @@
-"""Helpers for loading simulation data into :class:`Simulation` objects."""
+"""
+Simulation loading utilities.
+
+Provides functions to load simulation data from various formats.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
 
 import yt
 
 from .registries import sim_metadata
 from .simulation import Simulation
+from ..logging import get_logger
 
+afLogger = get_logger()
 
 def load(
-    unique_name: str | None = None, path: str | None = None, force_reg
-      = False, force_derived_comp = False, **kwargs
+    unique_name: Optional[str] = None,
+    path: Optional[str] = None,
+    force_registration: bool = False,
+    force_recompute: bool = False,
+    **kwargs,
 ) -> Simulation:
     """Return a :class:`Simulation` instance for the requested dataset.
 
@@ -28,12 +41,14 @@ def load(
     # Check the metadata file for existing simulations, and get path if present
     in_registry = unique_name in sim_metadata.data
     if in_registry:
+        afLogger.info(f"Simulation '{unique_name}' found in registry. Loading metadata")
         sim_data = sim_metadata.get(unique_name)
         # Update path if different
-        if path != sim_data["path"]:
+        if path is not None and path != sim_data.get("path"):
+            afLogger.info(f"Path given for '{unique_name}' is different from registry, updating from {sim_data['path']} to {path}")
             sim_data["path"] = path
             sim_metadata.save()
-        path = sim_data["path"]
+        path = sim_data.get("path")
 
     # Load the timeseries using yt
     if isinstance(path, str) and "*" not in path:
@@ -44,14 +59,14 @@ def load(
     # Figure out name and register (we register first to check for duplicates)
     dataset_name = type(ts[0]).__name__
 
-    if not in_registry or force_reg:
-        unique_name = sim_metadata.register_sim(path, unique_name, dataset_name, force_reg=force_reg)
+    if not in_registry or force_registration:
+        unique_name = sim_metadata.register_sim(path, unique_name, dataset_name, force_reg=force_registration)
 
     # Create the final Simulation object
     sim = Simulation(ts, path, unique_name, dataset_name)
 
     # Load additional fields
-    sim.setup_snapshots(force_comp=force_derived_comp)
+    sim.setup_snapshots(force_recompute=force_recompute)
     sim.add_fields()
 
     return sim

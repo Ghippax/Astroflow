@@ -1,0 +1,19 @@
+# astroflow/defaults.yaml
+derived:
+  save_in_setup: False
+  # list of derived properties computed by default in setup_snapshots
+  load_list:
+    - redshift
+    - center_default
+  # per-derived-function default parameters
+  params:
+    center_default:
+    shrinking_sphere:
+  
+logging:
+  level: DEBUG
+  yt_level: DEBUG
+
+io:
+  lock_timeout: 10
+  save_retries: 3
