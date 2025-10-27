@@ -33,10 +33,7 @@ class AstroflowLogger:
         # Only add handler if none exist
         if not self._logger.handlers:
             handler = logging.StreamHandler()
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
-            )
+            formatter = logging.Formatter("%(name)s : [%(levelname)s] %(asctime)s %(message)s")
             handler.setFormatter(formatter)
             self._logger.addHandler(handler)
     
@@ -69,8 +66,15 @@ class AstroflowLogger:
         level : str
             Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
         """
-        level_val = getattr(logging, level.upper(), logging.INFO)
+        try:
+            level_val = getattr(logging, level.upper(), logging.INFO)
+        except Exception as e:
+            self._logger.error(f"Invalid logging level '{level}': {e}. "
+                               f"Use one of DEBUG, INFO, WARNING, ERROR, CRITICAL. "
+                               f"Defaulting to INFO")
+            level_val = logging.INFO
         self._logger.setLevel(level_val)
+        self.info(f"Logging level set to {level.upper()}")
 
 
 def log_performance(func: Optional[Callable] = None, *, threshold: float = 0.0):
@@ -124,7 +128,7 @@ def log_performance(func: Optional[Callable] = None, *, threshold: float = 0.0):
         return decorator(func)
 
 
-# Module-level logger instance
+# Default logger instance
 logger = AstroflowLogger()
 
 
@@ -145,3 +149,17 @@ def get_logger(name: Optional[str] = None) -> AstroflowLogger:
     if name is None:
         return logger
     return AstroflowLogger(name)
+
+def set_log_level(level: str = "INFO", name: Optional[str] = None):
+    """
+    Set the logging level for a logger.
+    
+    Parameters
+    ----------
+    name : str, optional
+        Name of the logger. If None, sets level for the default astroflow logger.
+    level : str
+        Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
+    """
+    log = get_logger(name)
+    log.set_level(level)

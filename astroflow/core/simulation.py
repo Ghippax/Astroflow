@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from yt.data_objects.time_series import DatasetSeries
 
-from .. import conf, utils
-from .registries import derived_registry, sim_metadata
-from ..logging import get_logger
+from .. import config, utils
+from .registry import derived_registry, sim_metadata
+from ..log import get_logger
 
 afLogger = get_logger()
 
@@ -55,9 +55,9 @@ class Simulation:
         self,
         prop_name: str,
         snapshot: int,
-        params: Optional[dict] = None,
         force_recompute: bool = False,
         auto_save: bool = True,
+        **kwargs
     ) -> Any:
         """
         Get or compute a derived property for a specific snapshot.
@@ -105,7 +105,7 @@ class Simulation:
 
         # Perform calculation using the derived properties registry
         try:
-            result = derived_registry.compute(prop_name, self, snapshot, params)
+            result = derived_registry.compute(prop_name, self, snapshot, **kwargs)
         except Exception as e:
             raise RuntimeError(f"Failed to compute {prop_name} for snapshot {snapshot}: {e}")
 
@@ -119,7 +119,7 @@ class Simulation:
             prop_dict["unit"] = None
 
         prop_dict["computed_at"] = datetime.now().isoformat()
-        prop_dict["params"] = params or {}
+        prop_dict["params"] = {**kwargs} or {}
         
         self._metadata_dirty = True
         
@@ -129,15 +129,13 @@ class Simulation:
         return result
 
     def setup_snapshots(self, force_recompute: bool = False):
-        # read default derived list and params from config
-        derived_list = conf.get("derived/load_list", [])
-        derived_params = conf.get("derived/params", {})
-        save_one_by_one = conf.get("derived/save_in_setup", False)
+        # read default derived list from config
+        derived_list = config.get("derived/load_list", [])
+        save_one_by_one = config.get("derived/save_in_setup", False)
 
         for i, ds in enumerate(self.ts.piter()):
             for prop_name in derived_list:
-                params = derived_params.get(prop_name, {})
-                self.get_derived(prop_name, i, params=params, force_recompute=force_recompute, auto_save=save_one_by_one)
+                self.get_derived(prop_name, i,force_recompute=force_recompute, auto_save=save_one_by_one)
 
         # Single save at the end if specified
         if not save_one_by_one:

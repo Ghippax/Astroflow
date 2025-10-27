@@ -1,0 +1,48 @@
+# astroflow/defaults.yaml
+derived:
+  save_in_setup: False
+  # list of derived properties computed by default in setup_snapshots
+  load_list:
+    - redshift
+    - center_default
+  # per-derived-function default parameters
+  params:
+    center_default:
+    shrinking_sphere:
+  
+logging:
+  level: DEBUG
+  yt_level: DEBUG
+
+plotting_fn:
+  proj:
+    params:
+      data_args:
+        center: center_default
+        xy_units: kpc
+  slice:
+    params:
+      data_args:
+        center: center_default
+        xy_units: kpc
+
+data_fn:
+  proj_frb:
+    params:
+      data_args:
+        axis: 1
+        width: 1
+        resolution: 400
+
+rendering_fn:
+  image:
+    params:
+      style_args:
+        colorbar: True
+        cmap: viridis
+        figsize: [10,10]
+
+# Not working right now
+io:
+  lock_timeout: 10
+  save_retries: 3

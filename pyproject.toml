@@ -38,6 +38,7 @@ dependencies = [
     "unyt>=2.5.0",
     "ipykernel>=6.16.2",
     "jupyter>=1.1.1",
+    "pydantic>=2.5.3",
 ]
 
 [project.urls]

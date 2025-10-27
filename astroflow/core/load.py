@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-import yt
+from yt import DatasetSeries
 
-from .registries import sim_metadata
+from .registry import sim_metadata
 from .simulation import Simulation
-from ..logging import get_logger
+from ..log import get_logger
 
 afLogger = get_logger()
 
@@ -52,9 +52,9 @@ def load(
 
     # Load the timeseries using yt
     if isinstance(path, str) and "*" not in path:
-        ts = yt.DatasetSeries([path], **kwargs)
+        ts = DatasetSeries([path], **kwargs)
     else:
-        ts = yt.DatasetSeries(path, **kwargs)
+        ts = DatasetSeries(path, **kwargs)
 
     # Figure out name and register (we register first to check for duplicates)
     dataset_name = type(ts[0]).__name__

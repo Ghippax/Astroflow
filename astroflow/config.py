@@ -1,41 +1,20 @@
-import copy
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import yaml
 import contextlib
+import copy
 import time
 import os
 import tempfile
-import yaml
-
-from typing import Any, Dict, Optional
-from pathlib import Path
-
-import numpy as np
-from unyt import unyt_array, unyt_quantity
 
 from .log import get_logger
-from . import config
 
 afLogger = get_logger()
 
-
-# Return unyt arrays to their original form when loading from metadata. In case of None unit, unyt correctly returns a dimensionless object
-def deserialize_units(d):
-    if isinstance(d, dict) and "value" in d and "unit" in d:
-        if isinstance(d["value"], (list, tuple, np.ndarray)):
-            return unyt_array(np.array(d["value"]), d["unit"])
-        elif isinstance(d["value"], (float, int)):
-            return unyt_quantity(d["value"], d["unit"])
-    return d
-
-
-# Convert unyt arrays to a serializable form for metadata storage
-def serialize_units(val):
-    if isinstance(val, unyt_array):
-        return {"value": val.value.tolist(), "unit": str(val.units)}
-    elif isinstance(val, unyt_quantity):
-        return {"value": val.value, "unit": str(val.units)}
-    return val
-
-
+# A few utility functions (in utils too) to avoid circular imports
 def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     """Return a new dict with `b` merged into `a` recursively.
     Values in `b` override `a`. Lists are replaced.
@@ -51,7 +30,6 @@ def deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
 
     _merge(result, b)
     return result
-
 
 @contextlib.contextmanager
 def file_lock(path, timeout: Optional[float] = 10):
@@ -172,85 +150,125 @@ def atomic_save_yaml(data: dict, path: Path, max_retries: Optional[int] = 5):
             except Exception as e2:
                 afLogger.warning(f"Failed to remove temp file: {e2}")
             raise OSError(f"Failed to save {path}: {e}") from e
-        
-def resolve_params(
-    conf_path: str, 
-    explicit: Dict[str, Any],
-    params: Optional[Dict[str, Any]],
-    defaults: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """Merge layers with precedence:
-    explicit (call-time named args) >
-    params (call-time dict, used by workflows) >
-    defaults (loads from config).
+
+class ConfigError(Exception):
+    pass
+
+
+class Config:
     """
-    defaults = config.get(conf_path, None) if defaults is None else defaults
-    out = {} if defaults is None else dict(defaults)
-    if params:
-        out.update(params)
-    # explicit overrides everything
-    out.update({k: v for k, v in explicit.items() if v is not None})
-    return out
-
-"""def with_params(config_path: Optional[str] = None):
+    Configuration manager.
     
-    Decorator that automatically resolves parameters using the hierarchy:
-    explicit kwargs > params dict > config file
-    
-    The decorated function should have:
-    - Named parameters for explicit API usage
-    - Optional `params` kwarg for batch/workflow usage
-    
-    Parameters
+    Attributes
     ----------
-    config_path : str, optional
-        Path in config file (e.g., "plot/slice_frb")
-        
-    Examples
-    --------
-    >>> @with_params("plot/slice_frb")
-    ... def slice_frb(ds, field, center=None, width=None, axis=None, resolution=None):
-    ...     # center, width, axis, resolution are already resolved!
-    ...     return make_slice(ds, field, center, width, axis, resolution)
-    
-    Usage:
-    >>> # Explicit API
-    >>> frb = slice_frb(ds, "density", center="max", width=(50, "kpc"))
-    
-    >>> # With params dict (used by workflows)
-    >>> frb = slice_frb(ds, "density", params={"center": "max", "width": (50, "kpc")})
-    
-    >>> # Config-only (uses values from config file)
-    >>> frb = slice_frb(ds, "density")
-    
-    def decorator(func):
-        # Get parameter names from function signature
-        sig = signature(func)
-        param_names = [
-            p.name for p in sig.parameters.values() 
-            if p.name != "params" # Exclude the params dict itself
-        ]
-        
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # Extract params dict if present
-            params_dict = kwargs.pop("params", None)
-            
-            # Resolve params: explicit > params_dict > config
-            resolved = resolve_params(
-                conf_path=config_path,
-                explicit={k: v for k, v in kwargs.items() if k in param_names},
-                params=params_dict,
-                defaults=None  # Will load from config
-            )
+    _data : dict
+        The configuration dictionary
+    """
+    def __init__(self, user_path: Optional[str] = None):
+        self.user_path = Path(user_path).expanduser() if user_path else Path("~/.astroflow/user_config.yaml").expanduser()
+        self._pkg_default_path = Path(__file__).parent / "default_config.yaml"
+        self._data: Dict[str, Any] = {}
+        self._load()
 
-            # Update kwargs with resolved params
-            for key in param_names:
-                if key in resolved:
-                    kwargs[key] = resolved[key]
-            
-            return func(*args, **kwargs)
+    def _load_pkg_default(self) -> Dict[str, Any]:
+        if not self._pkg_default_path.exists():
+            afLogger.error("Default config file not found, returning empty dict")
+            return {}
+        try:
+            with self._pkg_default_path.open() as f:
+                return yaml.safe_load(f) or {}
+        except Exception as e:
+            afLogger.error(f"Failed to load default config: {e}")
+            return {}
+
+    def _load_user(self) -> Dict[str, Any]:
+        if not self.user_path.exists():
+            return {}
+        try:
+            with self.user_path.open() as f:
+                return yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            afLogger.error(f"Corrupted user config file: {e}")
+            # Try backup
+            backup = self.user_path.with_suffix('.yaml.bak')
+            if backup.exists():
+                afLogger.warning(f"Loading from backup: {backup}")
+                try:
+                    with backup.open() as f:
+                        return yaml.safe_load(f) or {}
+                except Exception as e2:
+                    afLogger.error(f"Backup also corrupted: {e2}")
+            return {}
+        except Exception as e:
+            afLogger.error(f"Failed to load user config: {e}")
+            return {}
+
+    def _load(self) -> None:
+        pkg = self._load_pkg_default()
+        user = self._load_user()
+        # deep merge: user keys override package defaults
+        self._data = deep_merge(pkg, user)
+
+    def get_value(self, key_path: str, default: Any = None) -> Any:
+        """Slash-separated key path, e.g. 'derived/default_list'"""
+        parts = key_path.split("/") if key_path else []
+        cur = self._data
+        for p in parts:
+            if not isinstance(cur, dict) or p not in cur:
+                return default
+            cur = cur[p]
+        return cur
+
+    def set_value(self, key_path: str, value: Any, save_user: bool = True) -> None:
+        parts = key_path.split("/")
+        cur = self._data
+        for p in parts[:-1]:
+            cur = cur.setdefault(p, {})
+            if not isinstance(cur, dict):
+                raise ConfigError("Invalid config path")
+        cur[parts[-1]] = value
+        if save_user:
+            self.save()
+
+    def save(self, path: Optional[str] = None) -> None:
+        """
+        Save configuration to file.
         
-        return wrapper
-    return decorator
-"""
+        Parameters
+        ----------
+        path : str, optional
+            Path to save to. If None, saves to user_path.
+
+        Raises
+        ------
+        ConfigError
+            If save operation fails
+        """
+        p = Path(path) if path else self.user_path
+        try:
+            atomic_save_yaml(self._data, p)
+        except OSError as e:
+            raise ConfigError(f"Failed to save config: {e}") from e
+        
+    def all(self):
+        return dict(self._data)
+
+
+
+# Module-level convenience instance and helpers
+def load(user_path: Optional[str] = None) -> Config:
+    return Config(user_path)
+
+default_config = load()
+
+
+def get(key: str, default: Any = None) -> Any:
+    return default_config.get_value(key, default)
+
+
+def set(key: str, value: Any, save_user: bool = False) -> None:
+    default_config.set_value(key, value, save_user=save_user)
+
+
+def save(path: Optional[str] = None) -> None:
+    default_config.save(path)

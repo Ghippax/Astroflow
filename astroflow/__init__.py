@@ -9,25 +9,26 @@ __version__ = "0.1.0"
 __author__ = "Your Name"
 
 from .core import load
-from .core.registries import register_derived, derived_registry
 from .core.simulation import Simulation
-from .analysis import derived_prop
-from . import conf
+from .analysis import derived
+from .plot import data, plot, render
+from . import config
 
 # Setup variables with configuration settings
-from .logging import get_logger
+from .log import get_logger
 logger = get_logger()
-logger.set_level(conf.get("logging/level", "INFO"))
+logger.set_level(config.get("logging/level", "INFO"))
 
 from yt import set_log_level as yt_set_log_level
-yt_set_log_level(conf.get("logging/yt_level", "INFO"))
+yt_set_log_level(config.get("logging/yt_level", "INFO"))
 
 __all__ = [
     "load",
-    "register_derived",
-    "derived_registry",
     "Simulation",
-    "derived_prop",
-    "conf",
+    "data",
+    "render",
+    "plot",
+    "derived",
+    "config",
     "__version__",
 ]
