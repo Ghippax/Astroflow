@@ -14,7 +14,7 @@ from .. import config
 from pydantic import BaseModel, TypeAdapter
 
 from ..log import get_logger
-from ..utils import atomic_save_yaml
+from ..io_utils import atomic_save_yaml
 
 afLogger = get_logger()
 
@@ -156,8 +156,6 @@ class FunctionRegistry():
             if set_config:
                 config.set(config_param_key, set_config)
                 config.save(config_file)
-                
-            self._reg[key] = {"fn": fn, "config_path": computed_config_key, **metadata}
             
             # Find BaseModel parameters from type hints
             try:
@@ -198,7 +196,7 @@ class FunctionRegistry():
 
                 bound = sig.bind_partial(*args, **kwargs)
 
-                print("Adapters: ", adapters)
+                afLogger.debug(f"Adapters: {adapters}")
 
                 # Process each BaseModel parameter
                 for pname, model_cls in basemodels.items():
@@ -212,7 +210,7 @@ class FunctionRegistry():
                         if sig_param_name in model_field_names and sig_param_name in config_defaults:
                             basemodel_explicit_conf[sig_param_name] = config_defaults.get(sig_param_name)
                     # Collect the basemodel config defaults
-                    print("Config key: ", config_param_key, " Dict: ", config_defaults)
+                    afLogger.debug(f"Config key: {config_param_key} Dict: {config_defaults}")
                     basemodel_conf = config_defaults.get(pname,None) or {}
 
                     # Collect explicit arguments matching model fields
@@ -223,7 +221,7 @@ class FunctionRegistry():
 
                     # Get basemodel param value if provided
                     raw = bound.arguments.get(pname, None)
-                    print("Raw       (", pname, ") user input : ",raw)
+                    afLogger.debug(f"Raw       ({pname}) user input : {raw}")
 
                     # coerce/validate user value first
                     param_value = None
@@ -231,40 +229,42 @@ class FunctionRegistry():
                         param_value = ta.validate_python(raw)
                     
                     # Merge layers: config (basemodel) < config (explicit) < basemodel args < explicit args
-                    print("Validated (", pname, ") value      : ",param_value)
+                    afLogger.debug(f"Validated ({pname}) basemodel : {param_value}")
                     if param_value is not None:
                         param_dict = param_value.model_dump(exclude_unset=True)
-                        print("Config    (", pname, ") basemodel : ",basemodel_conf)
-                        print("Config    (", pname, ") explicit  : ",basemodel_explicit_conf)
-                        print("Basemodel (", pname, ") user-set  : ",param_dict)
-                        print("Explicit  (all): ",explicit)
+
+                        afLogger.debug(f"Config    ({pname}) basemodel : {basemodel_conf}")
+                        afLogger.debug(f"Config    ({pname}) explicit  : {basemodel_explicit_conf}")
+                        afLogger.debug(f"Basemodel ({pname}) user-set  : {param_dict}")
+                        afLogger.debug(f"Explicit  (all): {explicit}")
                         merged = {}
                         conditional_update(merged, basemodel_conf)
                         conditional_update(merged, basemodel_explicit_conf)
                         conditional_update(merged, param_dict, set(param_dict.keys()))
                         conditional_update(merged, explicit, set(explicit.keys()))
 
-                        print("Full      (", pname, ") merged   : ",merged)
+                        afLogger.debug(f"Full      ({pname}) merged   : {merged}")
                         bound.arguments[pname] = model_cls(**merged)
                     else:
-                        print("Config (", pname, ") basemodel : ",basemodel_conf)
-                        print("Config (", pname, ") explicit  : ",basemodel_explicit_conf)
-                        print("Explicit (all): ",explicit)
+                        afLogger.debug(f"Config    ({pname}) basemodel : {basemodel_conf}")
+                        afLogger.debug(f"Config    ({pname}) explicit  : {basemodel_explicit_conf}")
+                        afLogger.debug(f"Explicit  (all): {explicit}")
                         merged = {}
                         conditional_update(merged, basemodel_conf)
                         conditional_update(merged, basemodel_explicit_conf)
                         conditional_update(merged, explicit, set(explicit.keys()))
 
-                        print("Full   (", pname, ") merged    : ",merged)
+                        afLogger.debug(f"Full      ({pname}) merged   : {merged}")
                         bound.arguments[pname] = model_cls(**merged)
 
                 # Apply config defaults for non-BaseModel parameters
                 for pname, _ in sig.parameters.items():
-                    if (pname not in bound.arguments or pname is None) and pname in config_defaults:
+                    if pname not in bound.arguments and pname in config_defaults:
                             bound.arguments[pname] = config_defaults[pname]
 
                 return fn(*bound.args, **bound.kwargs)
 
+            self._reg[key] = {"fn": wrapper, "config_path": computed_config_key, **metadata}
             return wrapper
         return decorator
 
@@ -287,6 +287,13 @@ class FunctionRegistry():
         if key not in self._reg:
             raise KeyError(f"{self._name} '{key}' not registered")
         return {k: v for k, v in self._reg[key].items() if k != "fn"}
+    
+    def unregister(self, key: str) -> None:
+        """Unregister a function by key."""
+        if key in self._reg:
+            self._reg.pop(key)
+        else:
+            raise KeyError(f"{self._name} '{key}' not registered")
 
     def all(self) -> Dict[str, Dict[str, Any]]:
         """Return all registered items."""
@@ -299,50 +306,5 @@ class FunctionRegistry():
     def __contains__(self, key: str) -> bool:
         return key in self._reg
 
-
-class DerivedPropRegistry(FunctionRegistry):
-    def __init__(self):
-        super().__init__(name="Derived prop fn")
-
-    def compute(self, name: str, sim_obj, snap_id: int, **kwargs) -> Any:
-        """
-        Compute derived property for sim_obj at snapshot snap_id.
-        
-        Parameters
-        ----------
-        name : str
-            Name of the derived property
-        sim_obj : Simulation
-            Simulation object
-        snap_id : int
-            Snapshot index
-        params : dict, optional
-            Parameters to pass to the computation function
-            
-        Returns
-        -------
-        Any
-            Computed property value
-        """
-
-        fn = self.get(name)
-        return fn(sim_obj, snap_id, **kwargs)
-
-
 # Default registries
 sim_metadata = SimulationMetadata()
-derived_registry = DerivedPropRegistry()
-
-
-def register_derived(name: str, registry: DerivedPropRegistry = derived_registry, set_config: Optional[dict] = None, config_file: Optional[str] = None, **metadata):
-    """
-    Decorator to register a derived property computation function.
-
-    Examples
-    --------
-    >>> @register_derived("virial_radius")
-    ... def compute_rvir(sim_obj, snap_id, params):
-    ...     # computation
-    ...     return radius
-    """
-    return registry.register(name, set_config=set_config, config_file=config_file, **metadata)

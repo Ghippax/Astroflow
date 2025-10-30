@@ -5,12 +5,12 @@ from unyt import unyt_array
 """Validation logic and structure for plotting parameters
 """
 
-class IOParams(BaseModel):
+class IOConfig(BaseModel):
     save: Optional[bool] = None
     show: Optional[bool] = None
     path_to_save: Optional[str] = None
 
-class StyleParams(BaseModel):
+class StyleConfig(BaseModel):
     cmap: Optional[str] = None
     norm: Optional[str] = None
     vmin: Optional[float] = None
@@ -47,7 +47,7 @@ class StyleParams(BaseModel):
             unit = data_args.field_units if data_args.field_units is not None else "code_units"
             self.cbar_label = f"{field[0]} {field[1]} [{unit}]"
 
-class DataParams(BaseModel):
+class DataConfig(BaseModel):
     center: Union[str, None, unyt_array, tuple, list] = None
     width: Union[float, None, tuple] = None
     axis: Union[int, str, tuple, list, None] = None

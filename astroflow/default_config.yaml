@@ -1,14 +1,11 @@
 # astroflow/defaults.yaml
-derived:
+
+derived: 
   save_in_setup: False
   # list of derived properties computed by default in setup_snapshots
   load_list:
     - redshift
     - center_default
-  # per-derived-function default parameters
-  params:
-    center_default:
-    shrinking_sphere:
   
 logging:
   level: DEBUG
@@ -42,7 +39,23 @@ rendering_fn:
         cmap: viridis
         figsize: [10,10]
 
+derived_prop_fn:
+  center_default:
+    params: {}
+  redshift:
+    params: {}
+
 # Not working right now
 io:
   lock_timeout: 10
   save_retries: 3
+
+workflow:
+  parallel: False
+  max_workers: 4
+  cache_results: True
+  dry_run: False
+  continue_on_error: True
+  output_root: null
+  metadata_root: null
+  log_level: DEBUG

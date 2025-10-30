@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
-from .registry import register_render_fn
+from .registry import register_render
 from . import settings
 
 from ..log import get_logger
@@ -18,7 +18,7 @@ Rendering functions: They create intermediate representations (e.g., figures, ax
 """
 
 
-@register_render_fn("image")
+@register_render("image")
 def image(
     image: np.ndarray,
     cmap: Optional[str] = None,
@@ -29,7 +29,7 @@ def image(
     figsize: Iterable[int, int] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
-    style_args: settings.StyleParams = None,
+    style_args: settings.StyleConfig = None,
 ) -> Tuple[Figure, Axes]:
     """
     Wrapper around matplotlib imshow to create a figure and axes from an image array.

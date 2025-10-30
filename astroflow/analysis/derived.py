@@ -1,5 +1,5 @@
 from typing import Optional
-from ..core.registry import register_derived
+from .registry import register_derived
 from . import settings
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional, Union
 
 import matplotlib.pyplot as plt
-from .registry import register_plot_fn
+from .registry import register_plot
 from . import data, render, settings
 
 from ..log import get_logger
@@ -14,9 +14,7 @@ afLogger = get_logger()
 Plotting API: They output/save final plots or animations, generated with plot_data and rendering with plot_render modules
 """
 
-# TODO: Port helper functions, animations, saving, etc
-
-@register_plot_fn("slice")
+@register_plot("slice")
 def slice(
     sim,
     idx,
@@ -28,9 +26,9 @@ def slice(
     show: Optional[bool] = None,
     path_to_save: Optional[str] = None,
     # Full arguments
-    data_args: Optional[settings.DataParams] = None,
-    style_args: Optional[settings.StyleParams] = None,
-    io_args: Optional[settings.IOParams] = None,
+    data_args: Optional[settings.DataConfig] = None,
+    style_args: Optional[settings.StyleConfig] = None,
+    io_args: Optional[settings.IOConfig] = None,
 ):
     """
     Plot a slice of a simulation field.
@@ -53,7 +51,7 @@ def slice(
         fig.savefig(io_args.path_to_save)
         plt.close(fig)
 
-@register_plot_fn("proj")
+@register_plot("proj")
 def proj(
     sim,
     idx,
@@ -65,13 +63,15 @@ def proj(
     show: Optional[bool] = None,
     path_to_save: Optional[str] = None,
     # Full arguments
-    data_args: Optional[settings.DataParams] = None,
-    style_args: Optional[settings.StyleParams] = None,
-    io_args: Optional[settings.IOParams] = None,
+    data_args: Optional[settings.DataConfig] = None,
+    style_args: Optional[settings.StyleConfig] = None,
+    io_args: Optional[settings.IOConfig] = None,
 ):
     """
     Plot a projection of a simulation field.
     """
+
+    print("Doing proj plot")
 
     data_args.set_defaults(sim, idx)
 

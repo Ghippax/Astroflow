@@ -14,7 +14,7 @@ render_fn = FunctionRegistry(name="Rendering fn")
 plot_fn = FunctionRegistry(name="Plotting fn")
 
 # Convenience functions for registering plotting functions
-def register_data_fn(name: str, registry: FunctionRegistry = data_fn, set_config: Optional[dict] = None, config_file: Optional[str] = None, **metadata):
+def register_data(name: str, registry: FunctionRegistry = data_fn, set_config: Optional[dict] = None, config_file: Optional[str] = None, **metadata):
     """
     Decorator to register a data generation function.
 
@@ -27,7 +27,7 @@ def register_data_fn(name: str, registry: FunctionRegistry = data_fn, set_config
     """
     return registry.register(name, set_config=set_config, config_file=config_file, **metadata)
 
-def register_render_fn(name: str, registry: FunctionRegistry = render_fn, set_config: Optional[dict] = None, config_file: Optional[str] = None, **metadata):
+def register_render(name: str, registry: FunctionRegistry = render_fn, set_config: Optional[dict] = None, config_file: Optional[str] = None, **metadata):
     """
     Decorator to register a rendering function.
 
@@ -40,7 +40,7 @@ def register_render_fn(name: str, registry: FunctionRegistry = render_fn, set_co
     """
     return registry.register(name, set_config=set_config, config_file=config_file, **metadata)
 
-def register_plot_fn(name: str, registry: FunctionRegistry = plot_fn, set_config: Optional[dict] = None, config_file: Optional[str] = None, **metadata):
+def register_plot(name: str, registry: FunctionRegistry = plot_fn, set_config: Optional[dict] = None, config_file: Optional[str] = None, **metadata):
     """
     Decorator to register a plotting function.
 

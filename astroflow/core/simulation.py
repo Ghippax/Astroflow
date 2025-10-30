@@ -3,8 +3,10 @@ from typing import Any
 
 from yt.data_objects.time_series import DatasetSeries
 
-from .. import config, utils
-from .registry import derived_registry, sim_metadata
+from .. import config
+from ..utils import serialize_units, deserialize_units
+from .registry import sim_metadata, FunctionRegistry
+from ..analysis.registry import derived_fn
 from ..log import get_logger
 
 afLogger = get_logger()
@@ -40,14 +42,16 @@ class Simulation:
         path: str,
         name: str,
         code_name: str,
-        metadata_file=None,
+        metadata_file: FunctionRegistry = sim_metadata,
+        derived_registry: FunctionRegistry = derived_fn
     ):
         self.ts = ts
         self.path = path
         self.name = name
         self.code_name = code_name
 
-        self.metadata_file = metadata_file or sim_metadata
+        self.derived_registry = derived_registry
+        self.metadata_file = metadata_file
         self.meta = self.metadata_file.get(name) if name else {}
         self._metadata_dirty = False
 
@@ -101,16 +105,16 @@ class Simulation:
         # If not forcing, return cached value if it exists
         if "value" in prop_dict and not force_recompute:
             afLogger.debug(f"Using cached value for '{prop_name}' at snapshot {snapshot}")
-            return utils.deserialize_units(prop_dict)
+            return deserialize_units(prop_dict)
 
         # Perform calculation using the derived properties registry
         try:
-            result = derived_registry.compute(prop_name, self, snapshot, **kwargs)
+            result = self.derived_registry.compute(prop_name, self, snapshot, **kwargs)
         except Exception as e:
             raise RuntimeError(f"Failed to compute {prop_name} for snapshot {snapshot}: {e}")
 
         # Separate units from value with unyt
-        serialized = utils.serialize_units(result)
+        serialized = serialize_units(result)
         if isinstance(serialized, dict) and "value" in serialized and "unit" in serialized:
             prop_dict.update(serialized)
         else:
@@ -149,7 +153,7 @@ class Simulation:
 
     def list_derived_properties(self):
         """List all registered derived property names."""
-        return list(derived_registry._reg.keys())
+        return list(self.derived_registry._reg.keys())
 
     def add_fields(self):
         # Placeholder for adding additional fields
