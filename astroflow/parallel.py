@@ -3,6 +3,7 @@ Parallel execution utilities for Astroflow.
 
 Provides Dask-based scheduling with optional MPI support for yt operations.
 This module implements:
+- enable_parallelism() / disable_parallelism() for global parallel mode
 - Client management (auto, connect, set_client, get_client, dashboard_link)
 - DaskSchedulerAdapter for task submission with execution policies
 - run_yt_parallel for MPI-based parallel yt execution
@@ -25,8 +26,244 @@ T = TypeVar("T")
 # Execution policy types
 ExecutionPolicy = Literal["cpu", "process", "yt_mpi"]
 
-# Module-level client storage
+# Module-level state
 _active_client: Optional[Any] = None
+_parallel_enabled: bool = False
+_parallel_config: Dict[str, Any] = {
+    "suppress_io": True,
+    "n_procs": 4,
+}
+
+
+def enable_parallelism(
+    suppress_io: bool = True,
+    scheduler_address: Optional[str] = None,
+    n_workers: Optional[int] = None,
+    threads_per_worker: int = 1,
+    n_procs: int = 4,
+    **kwargs: Any,
+) -> Any:
+    """
+    Enable parallel execution for Astroflow operations.
+
+    This function initializes the parallel execution environment, similar to
+    yt.enable_parallelism(). Once enabled, yt operations like projections and
+    slices will automatically use parallel execution.
+
+    Parameters
+    ----------
+    suppress_io : bool, default=True
+        If True, suppress output from worker processes (only rank 0 outputs).
+    scheduler_address : str, optional
+        Address of an existing Dask scheduler. If None, creates a LocalCluster.
+    n_workers : int, optional
+        Number of workers for LocalCluster. Defaults to system CPU count.
+    threads_per_worker : int, default=1
+        Threads per worker for LocalCluster.
+    n_procs : int, default=4
+        Number of MPI processes for yt_mpi operations.
+    **kwargs
+        Additional arguments passed to the Dask client/cluster.
+
+    Returns
+    -------
+    distributed.Client
+        The active Dask client.
+
+    Examples
+    --------
+    >>> import astroflow as af
+    >>> af.enable_parallelism()  # Enable with defaults
+    >>> # Now all yt operations run in parallel
+    >>> af.plot.proj(sim, 0, ("gas", "density"))
+
+    >>> # Or connect to existing cluster
+    >>> af.enable_parallelism(scheduler_address="tcp://scheduler:8786")
+
+    >>> # Enable yt's native parallelism as well
+    >>> import yt
+    >>> yt.enable_parallelism()
+    >>> af.enable_parallelism()
+    """
+    global _parallel_enabled, _parallel_config
+
+    # Store configuration
+    _parallel_config["suppress_io"] = suppress_io
+    _parallel_config["n_procs"] = n_procs
+
+    # Initialize Dask client
+    client = auto(
+        scheduler_address=scheduler_address,
+        n_workers=n_workers,
+        threads_per_worker=threads_per_worker,
+        **kwargs,
+    )
+
+    _parallel_enabled = True
+
+    afLogger.info(
+        f"Parallelism enabled. Dashboard: {dashboard_link()}. "
+        f"Use disable_parallelism() to turn off."
+    )
+
+    return client
+
+
+def disable_parallelism() -> None:
+    """
+    Disable parallel execution and close the Dask client.
+
+    Examples
+    --------
+    >>> import astroflow as af
+    >>> af.enable_parallelism()
+    >>> # ... do parallel work ...
+    >>> af.disable_parallelism()
+    """
+    global _parallel_enabled
+
+    close()
+    _parallel_enabled = False
+    afLogger.info("Parallelism disabled.")
+
+
+def is_parallel_enabled() -> bool:
+    """
+    Check if parallel execution is enabled.
+
+    Returns
+    -------
+    bool
+        True if parallelism is enabled, False otherwise.
+
+    Examples
+    --------
+    >>> import astroflow as af
+    >>> af.is_parallel_enabled()
+    False
+    >>> af.enable_parallelism()
+    >>> af.is_parallel_enabled()
+    True
+    """
+    return _parallel_enabled
+
+
+def get_parallel_config() -> Dict[str, Any]:
+    """
+    Get the current parallel configuration.
+
+    Returns
+    -------
+    dict
+        Current parallel configuration including n_procs, suppress_io, etc.
+    """
+    return dict(_parallel_config)
+
+
+def run_parallel(
+    func: Callable[..., T],
+    *args: Any,
+    policy: Optional[ExecutionPolicy] = None,
+    pure: bool = False,
+    **kwargs: Any,
+) -> T:
+    """
+    Execute a function using the parallel backend if parallelism is enabled.
+
+    This is a convenience function that automatically uses the active Dask
+    client when parallelism is enabled. If parallelism is disabled, the
+    function is executed directly.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to execute.
+    *args
+        Positional arguments for the function.
+    policy : str, optional
+        Execution policy: "cpu", "process", or "yt_mpi".
+        If None, uses "cpu" by default.
+    pure : bool, default=False
+        Whether the function is pure (deterministic).
+        Set to False for yt operations.
+    **kwargs
+        Keyword arguments for the function.
+
+    Returns
+    -------
+    Any
+        The result of the function.
+
+    Examples
+    --------
+    >>> import astroflow as af
+    >>> af.enable_parallelism()
+    >>> # Run a yt operation in parallel
+    >>> result = af.parallel.run_parallel(my_yt_func, ds, policy="yt_mpi")
+    """
+    if not _parallel_enabled:
+        return func(*args, **kwargs)
+
+    # Get or create adapter
+    adapter = DaskSchedulerAdapter()
+
+    # Build policy
+    task_policy = TaskPolicy(
+        policy=policy or "cpu",
+        pure=pure,
+        n_procs=_parallel_config.get("n_procs", 4),
+    )
+
+    # Submit and wait for result
+    result = adapter.submit(func, *args, policy=task_policy, **kwargs)
+
+    # If it's a Future, wait for result
+    if hasattr(result, "result") and callable(result.result):
+        return result.result()
+    return result
+
+
+def piter(iterable: Any, **kwargs: Any) -> Any:
+    """
+    Parallel iterator that works with yt's piter when parallelism is enabled.
+
+    When parallelism is enabled, this wraps yt.parallel_objects or similar
+    functionality. When disabled, returns the iterable unchanged.
+
+    Parameters
+    ----------
+    iterable : iterable
+        The iterable to parallelize.
+    **kwargs
+        Additional arguments passed to the parallel iterator.
+
+    Returns
+    -------
+    iterable
+        A parallel iterator if parallelism is enabled, otherwise the original.
+
+    Examples
+    --------
+    >>> import astroflow as af
+    >>> af.enable_parallelism()
+    >>> for ds in af.parallel.piter(simulation):
+    ...     # Process each snapshot in parallel
+    ...     process(ds)
+    """
+    if not _parallel_enabled:
+        return iterable
+
+    # Try to use yt's parallel_objects if available
+    try:
+        import yt
+
+        return yt.parallel_objects(iterable, **kwargs)
+    except (ImportError, AttributeError):
+        pass
+
+    # Fallback: return iterable (serial execution)
+    afLogger.debug("yt.parallel_objects not available, using serial iteration")
+    return iterable
 
 
 def _import_dask_distributed() -> Any:

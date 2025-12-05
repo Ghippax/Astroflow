@@ -367,22 +367,27 @@ class Workflow(BaseModel):
 
         When parallel execution is enabled (ctx.runtime.parallel=True), tasks are
         submitted through the DaskSchedulerAdapter using the task's execution_policy.
+        Registry-defined execution hints are used as defaults when task doesn't specify them.
 
         Returns
         -------
         Any
             Result of the invoked function
         """
-        # Get the target function based on task kind
+        # Get the target function and registry hints based on task kind
         fn = None
         fn_params = params
+        registry_hints = {}
 
         if task.kind == "plot":
             fn = ctx.runtime.plot_registry.get(task.target)
+            registry_hints = ctx.runtime.plot_registry.get_metadata(task.target)
         elif task.kind == "data":
             fn = ctx.runtime.data_registry.get(task.target)
+            registry_hints = ctx.runtime.data_registry.get_metadata(task.target)
         elif task.kind == "render":
             fn = ctx.runtime.render_registry.get(task.target)
+            registry_hints = ctx.runtime.render_registry.get_metadata(task.target)
         elif task.kind == "derived":
             if "sim" not in params or (
                 "snapshot" not in params and "idx" not in params
@@ -390,6 +395,8 @@ class Workflow(BaseModel):
                 raise ValueError(
                     f"Derived task '{task.id}' requires 'sim' and 'snapshot/idx' parameters."
                 )
+            # Get registry hints for derived
+            registry_hints = ctx.runtime.derived_registry.get_metadata(task.target)
             # For derived, we wrap the call since it needs special handling
             sim = params.pop("sim")
             snapshot = params.pop("snapshot", params.pop("idx", None))
@@ -399,10 +406,12 @@ class Workflow(BaseModel):
                 lambda: ctx.runtime.derived_registry.compute(
                     task.target, sim, snapshot, **params
                 ),
+                registry_hints=registry_hints,
             )
         elif task.kind == "python":
             fn = ctx.runtime.fn_registry.get(task.target)
             fn_params = {"context": ctx, **params}
+            registry_hints = ctx.runtime.fn_registry.get_metadata(task.target)
         elif task.kind == "workflow":
             nested = params.get("workflow") or task.target
             nested_params = params.get("params")
@@ -424,16 +433,27 @@ class Workflow(BaseModel):
             raise ValueError(f"Could not resolve function for task '{task.id}'")
 
         # Execute the function with parallel policy if enabled
-        return self._execute_with_policy(task, ctx, lambda: fn(**fn_params))
+        return self._execute_with_policy(
+            task, ctx, lambda: fn(**fn_params), registry_hints=registry_hints
+        )
 
     def _execute_with_policy(
-        self, task: Task, ctx: WorkflowContext, fn_call: Any
+        self,
+        task: Task,
+        ctx: WorkflowContext,
+        fn_call: Any,
+        registry_hints: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """
         Execute a function call respecting the task's execution policy.
 
         When parallel execution is enabled, submits through DaskSchedulerAdapter.
         Otherwise, executes directly.
+
+        Execution policy is determined by:
+        1. Task-level attributes (highest priority)
+        2. Registry-defined hints from function registration
+        3. Runtime defaults (lowest priority)
 
         Parameters
         ----------
@@ -443,6 +463,8 @@ class Workflow(BaseModel):
             Workflow context
         fn_call : callable
             Zero-argument callable that performs the actual work
+        registry_hints : dict, optional
+            Execution policy hints from the function registry
 
         Returns
         -------
@@ -458,14 +480,35 @@ class Workflow(BaseModel):
         if adapter is None:
             return fn_call()
 
-        # Build task policy from task attributes
+        # Build task policy from task attributes, falling back to registry hints
         from ..parallel import TaskPolicy
 
+        hints = registry_hints or {}
+
+        # Task attributes override registry hints which override defaults
+        # For execution_policy: task > registry > default("cpu")
+        execution_policy = task.execution_policy
+        if execution_policy == "cpu" and hints.get("execution_policy"):
+            execution_policy = hints.get("execution_policy", "cpu")
+
+        # For n_procs: task > registry > runtime config
+        n_procs = task.n_procs
+        if n_procs is None:
+            n_procs = hints.get("n_procs") or ctx.runtime.yt_mpi_procs
+
+        # For resources: merge registry hints with task resources (task wins)
+        resources = {**hints.get("resources", {}), **task.resources}
+
+        # For pure: task > registry > default(True)
+        pure = task.pure
+        if pure is True and hints.get("pure") is not None:
+            pure = hints.get("pure", True)
+
         policy = TaskPolicy(
-            policy=task.execution_policy,
-            resources=task.resources,
-            pure=task.pure,
-            n_procs=task.n_procs or ctx.runtime.yt_mpi_procs,
+            policy=execution_policy,
+            resources=resources,
+            pure=pure,
+            n_procs=n_procs,
             eager_small=ctx.runtime.eager_small,
         )
 

@@ -16,6 +16,7 @@ from .plot import data, plot, render
 from . import config
 from .workflow import Workflow, WorkflowRuntimeConfig, Task, run
 from . import parallel
+from .parallel import enable_parallelism, disable_parallelism, is_parallel_enabled
 
 # Setup variables with configuration settings
 from .log import get_logger
@@ -36,6 +37,9 @@ __all__ = [
     "get_logger",
     "yt_set_log_level",
     "parallel",
+    "enable_parallelism",
+    "disable_parallelism",
+    "is_parallel_enabled",
     "Workflow",
     "WorkflowRuntimeConfig",
     "Task",
