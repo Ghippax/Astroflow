@@ -284,7 +284,9 @@ def run_yt_parallel(
             future = executor.submit(func, *args, **kwargs)
             return future.result()
     except ImportError:
-        afLogger.debug("mpi4py.futures not available, falling back to mpirun")
+        afLogger.debug(
+            "mpi4py.futures not available, falling back to mpirun subprocess"
+        )
 
     # Fallback to mpirun subprocess
     return _run_mpirun_fallback(func, *args, n_procs=n_procs, **kwargs)
@@ -539,7 +541,9 @@ class DaskSchedulerAdapter:
 
         # Filter out keys that conflict with our explicit policy settings
         filtered_kwargs = {
-            k: v for k, v in kwargs.items() if k not in ("pure", "resources")
+            k: v
+            for k, v in kwargs.items()
+            if k not in ("pure", "priority", "resources")
         }
 
         map_kwargs: Dict[str, Any] = {
