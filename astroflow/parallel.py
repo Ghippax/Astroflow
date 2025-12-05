@@ -284,7 +284,7 @@ def run_yt_parallel(
             future = executor.submit(func, *args, **kwargs)
             return future.result()
     except ImportError:
-        afLogger.debug("mpi4py not available, falling back to mpirun")
+        afLogger.debug("mpi4py.futures not available, falling back to mpirun")
 
     # Fallback to mpirun subprocess
     return _run_mpirun_fallback(func, *args, n_procs=n_procs, **kwargs)
@@ -302,8 +302,13 @@ def _run_mpirun_fallback(
     This is a fallback when mpi4py is not available. It serializes the
     function and arguments, then executes them via mpirun.
     """
+    import os
     import pickle
     import tempfile
+
+    # Validate n_procs to prevent command injection
+    if not isinstance(n_procs, int) or n_procs < 1:
+        raise ValueError(f"n_procs must be a positive integer, got {n_procs}")
 
     # Create wrapper script
     wrapper_code = """
@@ -332,6 +337,7 @@ if __name__ == "__main__":
         script_file.write(wrapper_code)
         script_path = script_file.name
 
+    result_path = data_path + ".result"
     try:
         # Run via mpirun
         cmd = ["mpirun", "-n", str(n_procs), sys.executable, script_path, data_path]
@@ -339,7 +345,11 @@ if __name__ == "__main__":
         subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         # Load result
-        result_path = data_path + ".result"
+        if not os.path.exists(result_path):
+            raise RuntimeError(
+                "MPI execution completed but result file not found. "
+                "The function may have failed silently."
+            )
         with open(result_path, "rb") as f:
             return pickle.load(f)
     except subprocess.CalledProcessError as e:
@@ -350,15 +360,17 @@ if __name__ == "__main__":
         raise RuntimeError(
             "mpirun not found. Install MPI (e.g., OpenMPI) or mpi4py."
         ) from None
+    except (pickle.UnpicklingError, EOFError) as e:
+        raise RuntimeError(f"Failed to read result from MPI execution: {e}") from e
     finally:
         # Cleanup temp files
-        import os
-
-        for path in [data_path, script_path, data_path + ".result"]:
+        for path in [data_path, script_path, result_path]:
             try:
                 os.unlink(path)
-            except OSError:
-                pass
+            except FileNotFoundError:
+                pass  # File may not exist, which is fine
+            except OSError as e:
+                afLogger.debug(f"Failed to cleanup temp file {path}: {e}")
 
 
 class DaskSchedulerAdapter:
@@ -455,6 +467,13 @@ class DaskSchedulerAdapter:
             return run_yt_parallel(func, *args, n_procs=task_policy.n_procs, **kwargs)
 
         # Handle cpu/process policies via Dask
+        # Filter out keys that conflict with our explicit policy settings
+        filtered_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ("pure", "priority", "resources")
+        }
+
         submit_kwargs: Dict[str, Any] = {
             "pure": task_policy.pure,
             "priority": task_policy.priority,
@@ -468,7 +487,7 @@ class DaskSchedulerAdapter:
             f"(policy={task_policy.policy}, pure={task_policy.pure})"
         )
 
-        return self.client.submit(func, *args, **submit_kwargs, **kwargs)
+        return self.client.submit(func, *args, **filtered_kwargs, **submit_kwargs)
 
     def map(
         self,
@@ -518,6 +537,11 @@ class DaskSchedulerAdapter:
                 results.append(result)
             return results
 
+        # Filter out keys that conflict with our explicit policy settings
+        filtered_kwargs = {
+            k: v for k, v in kwargs.items() if k not in ("pure", "resources")
+        }
+
         map_kwargs: Dict[str, Any] = {
             "pure": task_policy.pure,
         }
@@ -525,7 +549,7 @@ class DaskSchedulerAdapter:
         if task_policy.resources:
             map_kwargs["resources"] = task_policy.resources
 
-        return self.client.map(func, *iterables, **map_kwargs, **kwargs)
+        return self.client.map(func, *iterables, **filtered_kwargs, **map_kwargs)
 
     def gather(self, futures: Any) -> Any:
         """
