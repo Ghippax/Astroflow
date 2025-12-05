@@ -64,6 +64,10 @@ analysis = [
 halo = [
     "yt_astro_analysis>=1.1.0",
 ]
+parallel = [
+    "dask>=2024.9.0",
+    "distributed>=2024.9.0",
+]
 
 [tool.ruff]
 exclude = [

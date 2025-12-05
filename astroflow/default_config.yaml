@@ -53,6 +53,10 @@ io:
 workflow:
   parallel: False
   max_workers: 4
+  scheduler_address: null
+  threads_per_worker: 1
+  yt_mpi_procs: 4
+  eager_small: False
   cache_results: True
   dry_run: False
   continue_on_error: True
