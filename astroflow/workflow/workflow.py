@@ -14,11 +14,12 @@ from ..core.simulation import Simulation
 
 afLogger = get_logger()
 
+
 # Per task instance
 class Task(BaseModel):
     """
     Individual task specification within a workflow.
-    
+
     Attributes
     ----------
     id : str
@@ -43,7 +44,17 @@ class Task(BaseModel):
         Additional metadata for this task
     timeout : float, optional
         Timeout in seconds (future use)
+    execution_policy : str
+        Parallel execution policy: "cpu" (Dask threads), "process" (Dask processes),
+        or "yt_mpi" (MPI-based yt execution). Default is "cpu".
+    n_procs : int, optional
+        Number of MPI processes for yt_mpi policy. Default is 4.
+    resources : dict
+        Resource hints for the scheduler (e.g., {"memory": "2GB"})
+    pure : bool
+        Whether the function is pure (deterministic). Set to False for yt tasks.
     """
+
     id: str
     target: str
     kind: Literal["plot", "derived", "data", "python", "workflow"]
@@ -55,14 +66,20 @@ class Task(BaseModel):
     outputs: Dict[str, Any] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     timeout: Optional[float] = None
+    # Parallel execution policy hints
+    execution_policy: Literal["cpu", "process", "yt_mpi"] = "cpu"
+    n_procs: Optional[int] = None
+    resources: Dict[str, Any] = Field(default_factory=dict)
+    pure: bool = True
 
     model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
+
 
 @dataclass
 class WorkflowContext:
     """
     Context for a workflow run, holding state and results.
-    
+
     Attributes
     ----------
     workflow : Workflow
@@ -80,6 +97,7 @@ class WorkflowContext:
     metadata : dict
         Mutable store for run metadata (e.g., errors)
     """
+
     workflow: Workflow
     simulations: Sequence[Simulation]
     params: Dict[str, Any]
@@ -96,7 +114,7 @@ class WorkflowContext:
     def lookup(self, token: str) -> Any:
         """
         Resolve a dot-separated token path.
-        
+
         Supports:
         - params.* → workflow parameters
         - runtime.* → runtime config
@@ -105,7 +123,7 @@ class WorkflowContext:
         - artifacts.* → artifact store
         - metadata.* → metadata store
         - <task_id> → previous task result
-        
+
         Returns None if path is invalid.
         """
         if not token:
@@ -135,12 +153,13 @@ class WorkflowContext:
                 value = getattr(value, part, None)
         return value
 
+
 # TODO: Read Pydantic docs to ensure below, keep in mind .registry.py load and export should work with this
 # Per workflow instance, this should be serializable to/from YAML and runnable
 class Workflow(BaseModel):
     """
     Workflow specification, serializable to/from YAML.
-    
+
     Attributes
     ----------
     name : str
@@ -148,12 +167,13 @@ class Workflow(BaseModel):
     tasks : list of Task
         Tasks to execute
     default_params : dict
-        Default parameters 
+        Default parameters
     runtime : WorkflowRuntimeConfig
         Default runtime configuration
     metadata : dict
         Workflow metadata (version, authors, etc.)
     """
+
     name: str
     tasks: List[Task]
     default_params: Dict[str, Any] = Field(default_factory=dict)
@@ -165,11 +185,11 @@ class Workflow(BaseModel):
     def task_dict(self) -> Dict[str, Task]:
         """Return dict mapping task.id → Task."""
         return {task.id: task for task in self.tasks}
-    
+
     def _resolve_task_order(self) -> List[str]:
         """
         Resolve task execution order using topological sort.
-        
+
         Raises
         ------
         ValueError
@@ -198,13 +218,16 @@ class Workflow(BaseModel):
         if len(order) != len(self.tasks):
             raise ValueError(f"Workflow '{self.name}' contains cyclic dependencies.")
         return order
-    
-    def run(self, simulations: Sequence["Simulation"], params: Optional[Dict[str, Any]] = None,
+
+    def run(
+        self,
+        simulations: Sequence["Simulation"],
+        params: Optional[Dict[str, Any]] = None,
         runtime_config: Union[WorkflowRuntimeConfig, Dict[str, Any], None] = None,
     ) -> WorkflowContext:
         """
         Execute the workflow on given simulations.
-        
+
         Parameters
         ----------
         simulations : sequence of Simulation
@@ -213,7 +236,7 @@ class Workflow(BaseModel):
             Parameters to merge with default_params
         runtime_config : WorkflowRuntimeConfig or dict, optional
             Runtime configuration overrides
-        
+
         Returns
         -------
         WorkflowContext
@@ -240,9 +263,13 @@ class Workflow(BaseModel):
             resolved_params = self._expand_placeholders(task.params, ctx)
 
             if ctx.runtime.dry_run:
-                afLogger.info(f"[DRY-RUN] {task.id}: {task.kind}:{task.target} {resolved_params}")
+                afLogger.info(
+                    f"[DRY-RUN] {task.id}: {task.kind}:{task.target} {resolved_params}"
+                )
                 if task.persist:
-                    ctx.store_result(task, {"status": "dry-run", "params": resolved_params})
+                    ctx.store_result(
+                        task, {"status": "dry-run", "params": resolved_params}
+                    )
                 continue
 
             try:
@@ -258,7 +285,7 @@ class Workflow(BaseModel):
                 ctx.store_result(task, result)
 
         return ctx
-    
+
     def _dispatch_task(
         self,
         task: Task,
@@ -267,11 +294,11 @@ class Workflow(BaseModel):
     ) -> Any:
         """
         Dispatch task based on execution strategy.
-        
+
         - global: run once
         - per_simulation: run once per sim, inject sim/sim_name
         - per_snapshot: run once per (sim, snapshot), inject sim/snapshot/idx
-        
+
         Returns
         -------
         Any
@@ -279,21 +306,31 @@ class Workflow(BaseModel):
         """
         if task.execution == "global":
             return self._invoke(task, ctx, params)
-        
+
         if task.execution == "per_simulation":
             results = {}
             # TODO: Should be parallel! easily done with yt .piter()
             for sim in ctx.simulations:
-                overrides = {"sim": sim, "simulation": sim, "sim_name": getattr(sim, "name", None)}
-                call_params = self._expand_placeholders(copy.deepcopy(params), ctx, overrides)
+                overrides = {
+                    "sim": sim,
+                    "simulation": sim,
+                    "sim_name": getattr(sim, "name", None),
+                }
+                call_params = self._expand_placeholders(
+                    copy.deepcopy(params), ctx, overrides
+                )
                 result = self._invoke(task, ctx, call_params)
                 results[getattr(sim, "name", str(sim))] = result
             return results
-        
+
         if task.execution == "per_snapshot":
             results = {}
-            base_params = copy.deepcopy(params) # Avoid mutation (_expand_placeholders mutates params)
-            snaps = base_params.pop("snapshots", None) # Always remove snapshots param if present
+            base_params = copy.deepcopy(
+                params
+            )  # Avoid mutation (_expand_placeholders mutates params)
+            snaps = base_params.pop(
+                "snapshots", None
+            )  # Always remove snapshots param if present
             snapshots = task.snapshots or snaps
             # TODO: Should be parallel, as in prev if
             for sim in ctx.simulations:
@@ -315,51 +352,137 @@ class Workflow(BaseModel):
                     sim_results[snap] = self._invoke(task, ctx, call_params)
                 results[getattr(sim, "name", str(sim))] = sim_results
             return results
-        raise ValueError(f"Unknown execution strategy '{task.execution}' for task '{task.id}'")
+        raise ValueError(
+            f"Unknown execution strategy '{task.execution}' for task '{task.id}'"
+        )
 
     def _invoke(self, task: Task, ctx: WorkflowContext, params: Dict[str, Any]) -> Any:
         """
         Invoke the target function based on task.kind.
-        
+
         - plot/data/render: lookup in registry, call with **params
         - derived: extract sim/snapshot, call derived_registry.compute
         - python: call fn_registry, pass context as first arg
         - workflow: recursively run nested workflow
-        
+
+        When parallel execution is enabled (ctx.runtime.parallel=True), tasks are
+        submitted through the DaskSchedulerAdapter using the task's execution_policy.
+
         Returns
         -------
         Any
             Result of the invoked function
         """
+        # Get the target function based on task kind
+        fn = None
+        fn_params = params
+
         if task.kind == "plot":
             fn = ctx.runtime.plot_registry.get(task.target)
-            return fn(**params)
-        if task.kind == "data":
+        elif task.kind == "data":
             fn = ctx.runtime.data_registry.get(task.target)
-            return fn(**params)
-        if task.kind == "render":
+        elif task.kind == "render":
             fn = ctx.runtime.render_registry.get(task.target)
-            return fn(**params)
-        if task.kind == "derived":
-            if "sim" not in params or "snapshot" not in params and "idx" not in params:
-                raise ValueError(f"Derived task '{task.id}' requires 'sim' and 'snapshot/idx' parameters.")
+        elif task.kind == "derived":
+            if "sim" not in params or (
+                "snapshot" not in params and "idx" not in params
+            ):
+                raise ValueError(
+                    f"Derived task '{task.id}' requires 'sim' and 'snapshot/idx' parameters."
+                )
+            # For derived, we wrap the call since it needs special handling
             sim = params.pop("sim")
-            snapshot = params.pop("snapshot", params.pop("idx"))
-            return ctx.runtime.derived_registry.compute(task.target, sim, snapshot, **params)
-        if task.kind == "python":
+            snapshot = params.pop("snapshot", params.pop("idx", None))
+            return self._execute_with_policy(
+                task,
+                ctx,
+                lambda: ctx.runtime.derived_registry.compute(
+                    task.target, sim, snapshot, **params
+                ),
+            )
+        elif task.kind == "python":
             fn = ctx.runtime.fn_registry.get(task.target)
-            return fn(context=ctx, **params)
-        if task.kind == "workflow":
+            fn_params = {"context": ctx, **params}
+        elif task.kind == "workflow":
             nested = params.get("workflow") or task.target
             nested_params = params.get("params")
             nested_runtime = params.get("runtime")
 
             nested_workflow = workflow_registry.get(nested)
             if nested_workflow is self:
-                raise ValueError(f"Workflow '{self.name}' cannot invoke itself recursively.")
-            
-            return nested_workflow.run(ctx.simulations, params=nested_params, runtime_config=nested_runtime).results
-        raise ValueError(f"Unsupported task kind '{task.kind}'")
+                raise ValueError(
+                    f"Workflow '{self.name}' cannot invoke itself recursively."
+                )
+
+            return nested_workflow.run(
+                ctx.simulations, params=nested_params, runtime_config=nested_runtime
+            ).results
+        else:
+            raise ValueError(f"Unsupported task kind '{task.kind}'")
+
+        if fn is None:
+            raise ValueError(f"Could not resolve function for task '{task.id}'")
+
+        # Execute the function with parallel policy if enabled
+        return self._execute_with_policy(task, ctx, lambda: fn(**fn_params))
+
+    def _execute_with_policy(
+        self, task: Task, ctx: WorkflowContext, fn_call: Any
+    ) -> Any:
+        """
+        Execute a function call respecting the task's execution policy.
+
+        When parallel execution is enabled, submits through DaskSchedulerAdapter.
+        Otherwise, executes directly.
+
+        Parameters
+        ----------
+        task : Task
+            The task being executed
+        ctx : WorkflowContext
+            Workflow context
+        fn_call : callable
+            Zero-argument callable that performs the actual work
+
+        Returns
+        -------
+        Any
+            Result of the function call
+        """
+        # If parallel execution is not enabled, execute directly
+        if not ctx.runtime.parallel:
+            return fn_call()
+
+        # Get or create the scheduler adapter
+        adapter = ctx.runtime.get_scheduler_adapter()
+        if adapter is None:
+            return fn_call()
+
+        # Build task policy from task attributes
+        from ..parallel import TaskPolicy
+
+        policy = TaskPolicy(
+            policy=task.execution_policy,
+            resources=task.resources,
+            pure=task.pure,
+            n_procs=task.n_procs or ctx.runtime.yt_mpi_procs,
+            eager_small=ctx.runtime.eager_small,
+        )
+
+        afLogger.debug(
+            f"Submitting task '{task.id}' with policy: "
+            f"{policy.policy}, pure={policy.pure}, n_procs={policy.n_procs}"
+        )
+
+        # Submit through the adapter
+        # Note: For yt_mpi and eager_small, submit returns result directly
+        # For cpu/process, it returns a Future
+        result = adapter.submit(fn_call, policy=policy)
+
+        # If it's a Future (from Dask), wait for the result
+        if hasattr(result, "result") and callable(result.result):
+            return result.result()
+        return result
 
     def _expand_placeholders(
         self,
@@ -369,13 +492,13 @@ class Workflow(BaseModel):
     ) -> Any:
         """
         Recursively replace $tokens with live values.
-        
+
         Supports:
         - Strings: "$params.field" → ctx.params["field"]
         - Dicts: {k: "$v"} → {k: resolved_v}
         - Lists: ["$v"] → [resolved_v]
         - Tuples: ("$v",) → (resolved_v,)
-        
+
         Parameters
         ----------
         obj : Any
@@ -384,7 +507,7 @@ class Workflow(BaseModel):
             Context for token resolution
         extra : dict, optional
             Override dict for per-sim/per-snap injected vars
-        
+
         Returns
         -------
         Any
@@ -402,10 +525,12 @@ class Workflow(BaseModel):
         return obj
 
     @staticmethod
-    def _resolve_snapshots(sim: Simulation, snapshots: Optional[Iterable[int]]) -> Iterable[int]:
+    def _resolve_snapshots(
+        sim: Simulation, snapshots: Optional[Iterable[int]]
+    ) -> Iterable[int]:
         """
         Resolve snapshot indices for a simulation.
-        
+
         If snapshots is None, returns range(len(sim)).
         Otherwise returns snapshots as-is.
         """
@@ -421,12 +546,12 @@ class Workflow(BaseModel):
     ) -> Any:
         """
         Resolve a single token path.
-        
+
         Resolution order:
         1. Check `extra` dict (per-sim/per-snap overrides)
         2. Check `extra` nested paths (e.g., sim.name)
         3. Delegate to ctx.lookup for workflow-level paths
-        
+
         Parameters
         ----------
         token : str
@@ -435,7 +560,7 @@ class Workflow(BaseModel):
             Context for lookup
         extra : dict, optional
             Override dict
-        
+
         Returns
         -------
         Any
@@ -460,11 +585,18 @@ class Workflow(BaseModel):
 Task.model_rebuild()
 Workflow.model_rebuild()
 
+
 # For registry workflows
-def run(workflow: Union[str, Workflow], simulations: Sequence[Simulation], params: Optional[Dict[str, Any]] = None, runtime_config: Optional[Dict[str, Any]] = None, registry: Dict = workflow_registry) -> WorkflowContext:
+def run(
+    workflow: Union[str, Workflow],
+    simulations: Sequence[Simulation],
+    params: Optional[Dict[str, Any]] = None,
+    runtime_config: Optional[Dict[str, Any]] = None,
+    registry: Dict = workflow_registry,
+) -> WorkflowContext:
     """
     Run a workflow by name or instance.
-    
+
     Parameters
     ----------
     workflow : str or Workflow
@@ -477,7 +609,7 @@ def run(workflow: Union[str, Workflow], simulations: Sequence[Simulation], param
         Runtime configuration overrides
     registry : dict, optional
         Workflow registry (defaults to workflow_registry)
-    
+
     Returns
     -------
     WorkflowContext

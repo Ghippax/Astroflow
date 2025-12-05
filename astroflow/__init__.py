@@ -15,6 +15,7 @@ from .analysis import derived
 from .plot import data, plot, render
 from . import config
 from .workflow import Workflow, WorkflowRuntimeConfig, Task, run
+from . import parallel
 
 # Setup variables with configuration settings
 from .log import get_logger
@@ -34,5 +35,10 @@ __all__ = [
     "config",
     "get_logger",
     "yt_set_log_level",
+    "parallel",
+    "Workflow",
+    "WorkflowRuntimeConfig",
+    "Task",
+    "run",
     "__version__",
 ]
