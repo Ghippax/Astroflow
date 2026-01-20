@@ -39,6 +39,7 @@ dependencies = [
     "ipykernel>=6.16.2",
     "jupyter>=1.1.1",
     "pydantic>=2.5.3",
+    "scienceplots>=2.1.1",
 ]
 
 [project.urls]

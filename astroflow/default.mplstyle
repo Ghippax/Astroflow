@@ -1,0 +1,23 @@
+font.size:    16.0
+figure.figsize:     6.4, 4.8  
+figure.constrained_layout.use: True
+xtick.top:           True
+axes.linewidth:     1
+lines.linewidth: 1.6
+lines.markeredgewidth: 1.6
+patch.linewidth:       1.6
+xtick.major.size:    7
+xtick.minor.size:    5
+xtick.major.width:   0.6
+xtick.major.pad:     4
+xtick.minor.pad:     4
+xtick.direction:     in
+xtick.minor.visible: True
+ytick.right:         True
+ytick.major.size:    6
+ytick.minor.size:    3
+ytick.major.width:   0.6
+ytick.major.pad:     4
+ytick.minor.pad:     4
+ytick.direction:     in
+ytick.minor.visible: True

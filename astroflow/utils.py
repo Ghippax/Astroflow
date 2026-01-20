@@ -15,7 +15,6 @@ def deserialize_units(d):
             return unyt_quantity(d["value"], d["unit"])
     return d
 
-
 # Convert unyt arrays to a serializable form for metadata storage
 def serialize_units(val):
     if isinstance(val, unyt_array):
@@ -24,3 +23,8 @@ def serialize_units(val):
         return {"value": val.value, "unit": str(val.units)}
     return val
 
+def is_particle(ds, field):
+    _ = ds.index # Force index creation for metadata access
+    if field not in ds.field_info:
+        return False
+    return True if ds.field_info[field].sampling_type == "particle" else False

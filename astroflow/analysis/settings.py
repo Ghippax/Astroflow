@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 
-"""Validation logic and structure for plotting parameters
+"""Validation logic and structure for analysis parameters
 """
 
 class PropParams(BaseModel):

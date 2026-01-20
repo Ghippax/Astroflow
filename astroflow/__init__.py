@@ -12,7 +12,7 @@ __author__ = "Your Name"
 from .core import load
 from .core.simulation import Simulation
 from .analysis import derived
-from .plot import data, plot, render
+from .plot import data, plot, render, settings
 from . import config
 from .workflow import Workflow, WorkflowRuntimeConfig, Task, run
 

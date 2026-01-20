@@ -28,11 +28,11 @@ class Config:
         self.user_path = Path(user_path).expanduser() if user_path else Path("~/.astroflow/user_config.yaml").expanduser()
         self._pkg_default_path = Path(__file__).parent / "default_config.yaml"
         self._data: Dict[str, Any] = {}
-        self._load()
+        self.load()
 
     def _load_pkg_default(self) -> Dict[str, Any]:
         if not self._pkg_default_path.exists():
-            afLogger.error("Default config file not found, returning empty dict")
+            afLogger.error("Default config file not found, returning empty dict. Functions will break")
             return {}
         try:
             with self._pkg_default_path.open() as f:
@@ -63,13 +63,13 @@ class Config:
             afLogger.error(f"Failed to load user config: {e}")
             return {}
 
-    def _load(self) -> None:
+    def load(self) -> None:
         pkg = self._load_pkg_default()
         user = self._load_user()
         # deep merge: user keys override package defaults
         self._data = deep_merge(pkg, user)
 
-    def get_value(self, key_path: str, default: Any = None) -> Any:
+    def get(self, key_path: str, default: Any = None) -> Any:
         """Slash-separated key path, e.g. 'derived/default_list'"""
         parts = key_path.split("/") if key_path else []
         cur = self._data
@@ -79,7 +79,7 @@ class Config:
             cur = cur[p]
         return cur
 
-    def set_value(self, key_path: str, value: Any, save_user: bool = True) -> None:
+    def set(self, key_path: str, value: Any, save_user: bool = True) -> None:
         parts = key_path.split("/")
         cur = self._data
         for p in parts[:-1]:
@@ -121,13 +121,15 @@ def load(user_path: Optional[str] = None) -> Config:
 
 default_config = load()
 
+def reload(config: Config = default_config) -> None:
+    config.load()
 
 def get(key: str, default: Any = None, config: Config = default_config) -> Any:
-    return config.get_value(key, default)
+    return config.get(key, default)
 
 
 def set(key: str, value: Any, save_user: bool = False, config: Config = default_config) -> None:
-    config.set_value(key, value, save_user=save_user)
+    config.set(key, value, save_user=save_user)
 
 
 def save(path: Optional[str] = None, config: Config = default_config) -> None:

@@ -9,27 +9,46 @@ derived:
   
 logging:
   level: DEBUG
-  yt_level: DEBUG
+  yt_level: INFO
 
 plotting_fn:
   proj:
-    params:
-      data_args:
-        center: center_default
-        xy_units: kpc
+    params: {}
   slice:
+    params: {}
+  output:
     params:
-      data_args:
-        center: center_default
-        xy_units: kpc
+      io_args:
+        show: True
+        save: False
+        return_fig: True
 
 data_fn:
   proj_frb:
     params:
       data_args:
-        axis: 1
-        width: 1
+        axis: 0
+        center: center_default
+        x_unit: kpc
+        y_unit: kpc
         resolution: 400
+        density: True
+        deposition: "cic"
+  slice_frb:
+    params:
+      data_args:
+        axis: 0
+        center: center_default
+        x_unit: kpc
+        y_unit: kpc
+        resolution: 400
+
+  profile:
+    params:
+      data_args:
+        n_bins: 50
+        accumulate: False
+        pdf: False
 
 rendering_fn:
   image:
@@ -37,7 +56,10 @@ rendering_fn:
       style_args:
         colorbar: True
         cmap: viridis
-        figsize: [10,10]
+  line:
+    params:
+      style_args:
+        style: ""
 
 derived_prop_fn:
   center_default:

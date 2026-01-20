@@ -397,6 +397,8 @@ dependencies = [
     { name = "pydantic", version = "2.12.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "pyyaml", version = "6.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
     { name = "pyyaml", version = "6.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
+    { name = "scienceplots", version = "2.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
+    { name = "scienceplots", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
     { name = "unyt", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
     { name = "unyt", version = "2.9.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8' and python_full_version < '3.9.2'" },
     { name = "unyt", version = "3.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9.2'" },
@@ -461,6 +463,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
+    { name = "scienceplots", specifier = ">=2.1.1" },
     { name = "scipy", marker = "extra == 'analysis'", specifier = ">=1.4.0" },
     { name = "sphinx", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=1.2" },
@@ -8124,6 +8127,49 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/73/e6/03b882225a1b0627e75339b420883dc3c90707a8917d2284abef7a58d317/ruff-0.14.0-py3-none-win32.whl", hash = "sha256:7450a243d7125d1c032cb4b93d9625dea46c8c42b4f06c6b709baac168e10543", size = 12367872, upload-time = "2025-10-07T18:21:46.67Z" },
     { url = "https://files.pythonhosted.org/packages/41/77/56cf9cf01ea0bfcc662de72540812e5ba8e9563f33ef3d37ab2174892c47/ruff-0.14.0-py3-none-win_amd64.whl", hash = "sha256:ea95da28cd874c4d9c922b39381cbd69cb7e7b49c21b8152b014bd4f52acddc2", size = 13464628, upload-time = "2025-10-07T18:21:50.318Z" },
     { url = "https://files.pythonhosted.org/packages/c6/2a/65880dfd0e13f7f13a775998f34703674a4554906167dce02daf7865b954/ruff-0.14.0-py3-none-win_arm64.whl", hash = "sha256:f42c9495f5c13ff841b1da4cb3c2a42075409592825dada7c5885c2c844ac730", size = 12565142, upload-time = "2025-10-07T18:21:53.577Z" },
+]
+
+[[package]]
+name = "scienceplots"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version < '3.8'",
+]
+dependencies = [
+    { name = "matplotlib", version = "3.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/04/aff33daa212cf6dd5427999062aab0289976dd1b0b842752e81ab17aef66/SciencePlots-2.1.1.tar.gz", hash = "sha256:d8d197e3410f87ebdad0b9c265eaab596094fb082d97123e835f6bc32800ab54", size = 10757, upload-time = "2023-11-25T19:10:12.943Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/2a/debffdd7061c7a65ab46c51e671b895dc8231c4a14950849c40699eb2070/SciencePlots-2.1.1-py3-none-any.whl", hash = "sha256:2e64d2e93b4f98702f30145dbb70d238f5dc315e227fec331489631232dfc9e0", size = 16472, upload-time = "2023-11-25T19:10:11.01Z" },
+]
+
+[[package]]
+name = "scienceplots"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.14' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "python_full_version >= '3.11' and python_full_version < '3.14' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "(python_full_version >= '3.14' and platform_machine != 'arm64') or (python_full_version >= '3.14' and sys_platform != 'darwin')",
+    "(python_full_version >= '3.11' and python_full_version < '3.14' and platform_machine != 'arm64') or (python_full_version >= '3.11' and python_full_version < '3.14' and sys_platform != 'darwin')",
+    "python_full_version >= '3.10.4' and python_full_version < '3.11' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "(python_full_version >= '3.10.4' and python_full_version < '3.11' and platform_machine != 'arm64') or (python_full_version >= '3.10.4' and python_full_version < '3.11' and sys_platform != 'darwin')",
+    "python_full_version >= '3.10.3' and python_full_version < '3.10.4' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "(python_full_version >= '3.10.3' and python_full_version < '3.10.4' and platform_machine != 'arm64') or (python_full_version >= '3.10.3' and python_full_version < '3.10.4' and sys_platform != 'darwin')",
+    "python_full_version >= '3.10' and python_full_version < '3.10.3'",
+    "python_full_version >= '3.9.2' and python_full_version < '3.10'",
+    "python_full_version >= '3.9' and python_full_version < '3.9.2'",
+    "python_full_version == '3.8.*'",
+]
+dependencies = [
+    { name = "matplotlib", version = "3.7.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.8.*'" },
+    { name = "matplotlib", version = "3.9.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.9.*'" },
+    { name = "matplotlib", version = "3.10.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9b/5c/2617c08c046d9e5bd6034001efa0b58fcfa46fc8090c0c870370a63270e8/scienceplots-2.2.0.tar.gz", hash = "sha256:240bbc081fdf3a4025e0e4491c946b294ed5041f8c1c7f09f0e6071558aa59cc", size = 14375, upload-time = "2025-11-20T01:41:06.998Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/23/fbb25276057e99c25b9575df2b56698a68be28335b38fc81a63e3b82c638/scienceplots-2.2.0-py3-none-any.whl", hash = "sha256:ab0c0bec3096e1e16adb212d4752bbf624bd31e9d04191ea79de611d00ce88f0", size = 30341, upload-time = "2025-11-20T01:41:06.079Z" },
 ]
 
 [[package]]

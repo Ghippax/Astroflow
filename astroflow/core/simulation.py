@@ -115,6 +115,7 @@ class Simulation:
 
         # Separate units from value with unyt
         serialized = serialize_units(result)
+
         if isinstance(serialized, dict) and "value" in serialized and "unit" in serialized:
             prop_dict.update(serialized)
         else:
@@ -123,7 +124,11 @@ class Simulation:
             prop_dict["unit"] = None
 
         prop_dict["computed_at"] = datetime.now().isoformat()
-        prop_dict["params"] = {**kwargs} or {}
+        # Serialize kwargs before storing
+        serialized_params = {}
+        for k, v in kwargs.items():
+            serialized_params[k] = serialize_units(v)
+        prop_dict["params"] = serialized_params
         
         self._metadata_dirty = True
         
