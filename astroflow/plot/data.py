@@ -69,7 +69,7 @@ def proj_frb(
     if is_particle_field:
         plot = yt.ParticleProjectionPlot(ds, data_args.axis, field, center=data_args.center, width=data_args.width, data_source=data_args.data_source, density = data_args.density, deposition = data_args.deposition, depth = data_args.depth, north_vector = data_args.up_vector, weight_field=data_args.weight_field)
     else:
-        if isinstance(data_args.axis, (str, int)) and data_args.up_vector is not None:
+        if isinstance(data_args.axis, (str, int)):
             afLogger.warning(f"North vector is ignored for axis aligned projection plots.")
             plot = yt.ProjectionPlot(ds, data_args.axis, field, center=data_args.center, width=data_args.width, data_source=data_args.data_source, weight_field=data_args.weight_field)
         else:
@@ -90,9 +90,12 @@ def _map_per_bin(val, bin_fields):
         return None
     if isinstance(val, dict):
         return val
-    if isinstance(val, (list, tuple)):
-        if len(val) != len(bin_fields):
-            raise ValueError(f"Expected {len(bin_fields)} entries for this argument, got {len(val)}")
+    if isinstance(val, list):
+        dim = len(bin_fields) if isinstance(bin_fields, list) else 1
+        if len(val) != dim:
+            raise ValueError(f"Expected {dim} entries for this argument, got {len(val)}")
+        if dim == 1:
+            return {bin_fields: val[0]}
         return {bf: v for bf, v in zip(bin_fields, val)}
     # scalar -> apply to all bin fields
     return {bf: val for bf in bin_fields}
@@ -122,10 +125,15 @@ def profile(
     extrema = _map_per_bin(data_args.bin_extrema, bin_fields)    # (min,max) per bin field or dict
     override_bins = _map_per_bin(data_args.set_bins, bin_fields) # explicit bin edges per field or dict
 
-    units = {field: data_args.unit} if data_args.unit is not None else None
-    axis_units = _map_per_bin([data_args.x_unit, data_args.y_unit, data_args.z_unit], bin_fields)
-    if axis_units is not None:
-        units = (units or {}) | axis_units
+    dim = len(bin_fields) if isinstance(bin_fields, list) else 1
+    axis_unit_vals = [data_args.x_unit, data_args.y_unit, data_args.z_unit][:dim]
+    axis_units = _map_per_bin(axis_unit_vals, bin_fields)
+        
+    field_unit = {field: data_args.unit} if data_args.postprocess is None else {}
+    units = (field_unit) | axis_units
+    units = {k: v for k, v in units.items() if v is not None}
+    if not units:
+        units = None
 
     profile = create_profile(
         ds,

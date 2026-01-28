@@ -34,7 +34,7 @@ def image(
     figsize: Iterable[int, int] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
-    style_args: settings.StyleImageConfig = None,
+    style_args: settings.StyleConfig = None,
 ) -> Tuple[Figure, Axes]:
     """
     Wrapper around matplotlib imshow to create a figure and axes from an image array.
@@ -47,7 +47,7 @@ def image(
     else:
         fig, ax = plt.subplots(figsize=style_args.figsize)
 
-    im = ax.imshow(image, cmap=style_args.cmap, norm=style_args.norm, vmin=style_args.vmin, vmax=style_args.vmax, extent=style_args.extent)
+    im = ax.imshow(image, cmap=style_args.cmap, norm=style_args.norm, vmin=style_args.vmin, vmax=style_args.vmax, extent=style_args.extent, aspect=style_args.aspect)
 
     if style_args.colorbar:
         # TODO: improve colorbar placement
@@ -72,7 +72,7 @@ def image(
 def line(
     x: np.ndarray,
     y: np.ndarray,
-    style_args: settings.StyleLineConfig = None,
+    style_args: settings.StyleConfig = None,
 ) -> Tuple[Figure, Axes]:
     """Render a 1D line plot."""
     if style_args.ax is not None:

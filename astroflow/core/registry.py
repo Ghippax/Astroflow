@@ -285,7 +285,8 @@ class FunctionRegistry():
     def get_metadata(self, key: str) -> Dict[str, Any]:
         """Get all metadata for a key."""
         if key not in self._reg:
-            raise KeyError(f"{self._name} '{key}' not registered")
+            available = ", ".join(self.keys())
+            raise KeyError(f"{self._name} '{key}' not registered. Available: {available}")
         return {k: v for k, v in self._reg[key].items() if k != "fn"}
     
     def unregister(self, key: str) -> None:

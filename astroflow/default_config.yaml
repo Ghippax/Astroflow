@@ -13,9 +13,19 @@ logging:
 
 plotting_fn:
   proj:
-    params: {}
+    params:
+      data_args:
+        x_unit: kpc
+        y_unit: kpc
   slice:
-    params: {}
+    params:
+      data_args:
+        x_unit: kpc
+        y_unit: kpc
+  profile:
+    params:
+      style_args:
+        aspect: "auto"
   output:
     params:
       io_args:
@@ -48,6 +58,7 @@ data_fn:
       data_args:
         n_bins: 50
         accumulate: False
+        deposition: cic
         pdf: False
 
 rendering_fn:

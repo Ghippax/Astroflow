@@ -7,6 +7,7 @@ from .registry import register_plot
 from . import data, render, settings
 
 from ..log import get_logger
+from ..analysis.registry import postpro_fn
 
 afLogger = get_logger()
 
@@ -33,7 +34,7 @@ def slice(
     path: Optional[str] = None,
     # Full arguments
     data_args: Optional[settings.DataConfig] = None,
-    style_args: Optional[settings.StyleImageConfig] = None,
+    style_args: Optional[settings.StyleConfig] = None,
     io_args: Optional[settings.IOConfig] = None,
 ):
     """
@@ -42,7 +43,7 @@ def slice(
     # Prepare data
     data_args.set_defaults(sim, idx)
     frb = data.slice_frb(sim[idx], field, center=data_args.center, data_args=data_args)
-    style_args.set_defaults(frb, field, data_args)
+    style_args.set_defaults_frb(frb, field, data_args)
     frb_arr = frb[field[0], field[1]]
 
     # Plot and save figure
@@ -66,7 +67,7 @@ def proj(
     density: Optional[bool] = None,
     # Full arguments
     data_args: Optional[settings.DataConfig] = None,
-    style_args: Optional[settings.StyleImageConfig] = None,
+    style_args: Optional[settings.StyleConfig] = None,
     io_args: Optional[settings.IOConfig] = None,
 ):
     """
@@ -76,7 +77,7 @@ def proj(
     # Prepare data
     data_args.set_defaults(sim, idx)
     frb = data.proj_frb(sim[idx], field, center=data_args.center, data_args=data_args)
-    style_args.set_defaults(frb, field, data_args)
+    style_args.set_defaults_frb(frb, field, data_args)
     frb_arr = frb[field[0], field[1]]
 
     # Plot and save figure
@@ -88,8 +89,7 @@ def proj(
 # TODO: sim,idx syntax is not very elegant, need a way to enable time/redshift sim slicing (could be a method of the sim object that returns dataset, issue is plot functions do need the sim object for other things)
 @register_plot("profile")
 def profile(
-    sim,
-    idx,
+    data_obj,
     bin_fields,
     field,
     # Shortcuts
@@ -108,19 +108,22 @@ def profile(
 
     # Prepare data
     dim = len(bin_fields) if isinstance(bin_fields, list) else 1
-    profile = data.profile(sim[idx], bin_fields, field, data_args=data_args)
-    profiled_data = profile[0][field].in_units(data_args.unit).v
+    profile = data.profile(data_obj, bin_fields, field, data_args=data_args)
+    profiled_data = profile[field]
 
-    # TODO: POSTPROCESSING!!!
+    if data_args.postprocess is not None:
+        profiled_data = postpro_fn.get(data_args.postprocess)(profile,field)
+
+    final_data = profiled_data.in_units(data_args.unit).v if data_args.unit is not None else profiled_data.v
 
     # Plot
     if dim == 1:
-        style_args.set_defaults(profile, [*bin_fields,field], data_args) # TODO: look into this
-        xbin = profile[0].x.in_units(data_args.x_unit).v
-        fig, ax = render.line(xbin, profiled_data, style_args=style_args)
+        style_args.set_defaults_profile(profile, [bin_fields,field], data_args)
+        xbin = profile.x.in_units(data_args.x_unit).v if data_args.x_unit is not None else profile.x.v
+        fig, ax = render.line(xbin, final_data, style_args=style_args)
     elif dim == 2:
-        style_args.set_defaults(profile, [*bin_fields,field], data_args) # TODO: look into this
-        fig, ax = render.image(profiled_data, style_args=style_args)
+        style_args.set_defaults_profile(profile, [*bin_fields,field], data_args)
+        fig, ax = render.image(final_data, style_args=style_args)
         pass
     else:
         afLogger.error(f"Profile plotting for {dim}D profiles is not supported.")
@@ -133,7 +136,7 @@ def profile(
 @register_plot("output")
 def output(fig, ax, io_args: settings.IOConfig):
     """Handle showing and saving of figures based on IOConfig."""
-    if io_args.show:
+    if io_args.show and not io_args.return_fig:
         plt.show()
 
     if io_args.save:

@@ -11,7 +11,7 @@ __author__ = "Your Name"
 # Expose main functionalities at the package level
 from .core import load
 from .core.simulation import Simulation
-from .analysis import derived
+from .analysis import derived, postpro
 from .plot import data, plot, render, settings
 from . import config
 from .workflow import Workflow, WorkflowRuntimeConfig, Task, run
@@ -31,6 +31,7 @@ __all__ = [
     "render",
     "plot",
     "derived",
+    "postpro",
     "config",
     "get_logger",
     "yt_set_log_level",
