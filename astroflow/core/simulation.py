@@ -5,7 +5,7 @@ from yt.data_objects.time_series import DatasetSeries
 
 from .. import config
 from ..utils import serialize_units, deserialize_units
-from .registry import sim_metadata, FunctionRegistry
+from .registry import sim_metadata, FunctionRegistry, SimulationMetadata
 from ..analysis.registry import derived_fn
 from ..log import get_logger
 
@@ -42,7 +42,7 @@ class Simulation:
         path: str,
         name: str,
         code_name: str,
-        metadata_file: FunctionRegistry = sim_metadata,
+        metadata_file: SimulationMetadata = sim_metadata,
         derived_registry: FunctionRegistry = derived_fn
     ):
         self.ts = ts
@@ -159,6 +159,10 @@ class Simulation:
     def list_derived_properties(self):
         """List all registered derived property names."""
         return list(self.derived_registry._reg.keys())
+
+    def purge_metadata(self):
+        """Remove this simulation's metadata from its metadata file. May be used to reset cached derived properties or correct corrupt computations."""
+        self.metadata_file.purge_sim(self.name)
 
     def add_fields(self):
         # Placeholder for adding additional fields

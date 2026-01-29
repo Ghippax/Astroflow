@@ -3,6 +3,8 @@ from unyt import unyt_array, unyt_quantity
 
 from .log import get_logger
 
+from collections.abc import Iterable
+
 afLogger = get_logger()
 
 
@@ -21,6 +23,8 @@ def serialize_units(val):
         return {"value": val.value.tolist(), "unit": str(val.units)}
     elif isinstance(val, unyt_quantity):
         return {"value": val.value, "unit": str(val.units)}
+    elif not isinstance(val, Iterable):
+        return {"value": float(val), "unit": "dimensionless"}
     return val
 
 def is_particle(ds, field):

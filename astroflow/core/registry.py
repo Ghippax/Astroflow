@@ -98,6 +98,14 @@ class SimulationMetadata:
             afLogger.warning(f"Simulation '{name}' not found in {self.path}. "
                              f"Returning empty dict")
         return self.data.get(name, {})
+    
+    def purge_sim(self, name):
+        """Remove a simulation from the metadata."""
+        if name in self.data:
+            self.data.pop(name)
+            self.save()
+        else:
+            afLogger.warning(f"Simulation '{name}' not found in {self.path}. Nothing to purge.")
 
     def list(self):
         """List all registered simulation names."""
