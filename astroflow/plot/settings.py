@@ -24,7 +24,7 @@ class IOConfig(BaseModel):
 
     def set_defaults(self, plot_type, field):
         if self.path is None and self.save:
-            self.path = f"{plot_type}_{field[0]}_{field[1]}_{datetime.now().strftime("%Y%m%d-%H%M%S-%f")}.png"
+            self.path = f"{plot_type}_{field[0]}_{field[1]}_{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.png"
 
 class StyleConfig(BaseModel):
     # General
@@ -152,7 +152,7 @@ class StyleConfig(BaseModel):
             # For profiles, profiled field is passed as last field
             cbar_field = [field[-1][0],field[-1][1]]
             
-            self.cbar_label = f"{cbar_field[0].capitalize()} {cbar_field[1].capitalize() if data_args.postprocess is None else postpro_fn.get_metadata(data_args.postprocess).get("label")} ({unit})"
+            self.cbar_label = f"{cbar_field[0].capitalize()} {cbar_field[1].capitalize() if data_args.postprocess is None else postpro_fn.get_metadata(data_args.postprocess).get('label')} ({unit})"
 
 
 class StyleImageConfig(StyleConfig):

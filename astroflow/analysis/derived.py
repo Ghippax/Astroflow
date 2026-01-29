@@ -35,7 +35,7 @@ def compute_center_it(sim, snap_idx: int, center = None, iterations=None, bounds
     sizeSphere = np.logspace(np.log10(bounds[0]),np.log10(bounds[1]),iterations)
 
     for i in range(iterations):
-        afLogger.debug(f"Iteration {i+1}/{iterations}: Computing center of mass within sphere of radius {sizeSphere[i]:.4f} Mpc around {centerTemp.to("Mpc")}")
+        afLogger.debug(f"Iteration {i+1}/{iterations}: Computing center of mass within sphere of radius {sizeSphere[i]:.4f} Mpc around {centerTemp.to('Mpc')}")
         sp     = ds.sphere(centerTemp, (sizeSphere[i],"Mpc"))
         if see:
             afLogger.info(f"Iteration {i+1}: Plotting density projection...")
