@@ -313,9 +313,9 @@ def cuspyness(sim, snap_idx, center = None, radius = None, particle=None, bins=N
         radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
 
     sp = ds.sphere(center, (radius,"kpc"))
-    # TODO: Fix 0.01 (should be few times epsilon) also radius*1.1
+    # TODO: Fix 0.02, should be few times epsilon
     field = (particle,"Masses")
-    profile = data.profile(sp, (particle,"particle_position_spherical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/kpc**3", bin_extrema=[(0.01,radius*1.1)], log = True, accumulate=True, postprocess="spherical_shell"))
+    profile = data.profile(sp, (particle,"particle_position_spherical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/kpc**3", bin_extrema=[(max(0.02,radius - radius*0.1),radius + radius*0.1)], log = False, accumulate=False, postprocess="spherical_shell"))
 
     rho = postpro_fn.get("spherical_shell")(profile,field).in_units("Msun/kpc**3").v
     r = profile.x.in_units("kpc").v
