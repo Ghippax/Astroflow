@@ -123,8 +123,10 @@ def profile(
         fig, ax = render.line(xbin, final_data, style_args=style_args)
     elif dim == 2:
         style_args.set_defaults_profile(profile, [*bin_fields,field], data_args)
-        fig, ax = render.image(final_data, style_args=style_args)
-        pass
+        #fig, ax = render.image(final_data, style_args=style_args)
+        xbin = profile.x.in_units(data_args.x_unit).v if data_args.x_unit is not None else profile.x.v
+        ybin = profile.y.in_units(data_args.y_unit).v if data_args.y_unit is not None else profile.y.v
+        fig, ax = render.mesh(xbin, ybin, final_data.T, style_args=style_args)
     else:
         afLogger.error(f"Profile plotting for {dim}D profiles is not supported.")
         fig, ax = plt.subplots()

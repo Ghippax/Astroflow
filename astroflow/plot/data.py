@@ -1,4 +1,3 @@
-#from typing import Tuple, Optional, Any
 
 from typing import Optional, Callable, Union
 import yt
@@ -66,16 +65,16 @@ def proj_frb(
     _ = ds.index # Force index creation for metadata access
     is_particle_field = is_particle(ds, field)
     
-    if is_particle_field:
+    if (is_particle_field and not ds.field_info[field].is_sph_field) or data_args.force_particle_projection:
         plot = yt.ParticleProjectionPlot(ds, data_args.axis, field, center=data_args.center, width=data_args.width, data_source=data_args.data_source, density = data_args.density, deposition = data_args.deposition, depth = data_args.depth, north_vector = data_args.up_vector, weight_field=data_args.weight_field)
+        plot.set_buff_size(data_args.resolution)
     else:
-        if isinstance(data_args.axis, (str, int)):
-            afLogger.warning(f"North vector is ignored for axis aligned projection plots.")
-            plot = yt.ProjectionPlot(ds, data_args.axis, field, center=data_args.center, width=data_args.width, data_source=data_args.data_source, weight_field=data_args.weight_field)
+        if isinstance(data_args.axis, (str, int)) or data_args.axis in ([1,0,0],[0,1,0],[0,0,1]):
+            afLogger.warning("North vector is ignored for axis aligned projection plots.")
+            plot = yt.ProjectionPlot(ds, data_args.axis, field, center=data_args.center, width=data_args.width, data_source=data_args.data_source, weight_field=data_args.weight_field, moment=data_args.moment, buff_size=data_args.resolution)
         else:
-            plot = yt.ProjectionPlot(ds, data_args.axis, field, center=data_args.center, width=data_args.width, data_source=data_args.data_source, north_vector = data_args.up_vector, weight_field=data_args.weight_field)
+            plot = yt.ProjectionPlot(ds, data_args.axis, field, center=data_args.center, width=data_args.width, data_source=data_args.data_source, north_vector = data_args.up_vector, weight_field=data_args.weight_field, moment=data_args.moment, buff_size=data_args.resolution)
 
-    plot.set_buff_size(data_args.resolution)
     frb = plot.frb
 
     if data_args.unit is not None:
@@ -85,7 +84,8 @@ def proj_frb(
 
 def _map_per_bin(val, bin_fields):
     """
-    Helper: convert scalar/list/dict into {bin_field: value} mapping (or None)"""
+    Helper: convert scalar/list/dict into {bin_field: value} mapping (or None)
+    """
     if val is None:
         return None
     if isinstance(val, dict):
@@ -98,7 +98,8 @@ def _map_per_bin(val, bin_fields):
             return {bin_fields: val[0]}
         return {bf: v for bf, v in zip(bin_fields, val)}
     # scalar -> apply to all bin fields
-    return {bf: val for bf in bin_fields}
+    map = {bf: val for bf in bin_fields} if isinstance(bin_fields, list) else {bin_fields: val}
+    return map
 
 @register_data("profile")
 def profile(

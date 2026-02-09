@@ -35,6 +35,9 @@ class StyleConfig(BaseModel):
     ylabel: Optional[str] = None
     grid: Optional[bool] = None
 
+    legend: Optional[bool] = None
+    legend_kwargs: Optional[dict] = None
+
     # Image specific
     cmap: Optional[str] = None
     norm: Optional[str] = None
@@ -44,17 +47,21 @@ class StyleConfig(BaseModel):
     cbar_label: Optional[str] = None
     extent: Union[tuple, list, None] = None
     aspect: Optional[str] = None
+    shading: Optional[str] = None
 
     # Line plot specific
     label: Optional[str] = None
     xlog: Optional[bool] = None
     ylog: Optional[bool] = None
-    color: Optional[str] = None
+    color: Union[str,list,tuple,None] = None
     style: Optional[str] = None
     linewidth: Optional[float] = None
     markersize: Optional[float] = None
+    marker: Optional[str] = None
     alpha: Optional[float] = None
     line_kwargs: Optional[dict] = None
+    xlim: Union[tuple, list, None] = None
+    ylim: Union[tuple, list, None] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -135,12 +142,12 @@ class StyleConfig(BaseModel):
                     
                 self.ylabel = f"{field[1][0].capitalize()} {field_label} ({unit})"
 
-        if self.extent is None and len(field) == 3:
-            self.extent = [
-                data_obj.x.in_units(data_args.x_unit).v[0]  if data_args.x_unit is not None else data_obj.x.v[0],
-                data_obj.x.in_units(data_args.x_unit).v[-1] if data_args.x_unit is not None else data_obj.x.v[-1],
-                data_obj.y.in_units(data_args.y_unit).v[0]  if data_args.y_unit is not None else data_obj.y.v[0],
-                data_obj.y.in_units(data_args.y_unit).v[-1] if data_args.y_unit is not None else data_obj.y.v[-1]]
+        #if self.extent is None and len(field) == 3:
+        #    self.extent = [
+        #        data_obj.x.in_units(data_args.x_unit).v[0]  if data_args.x_unit is not None else data_obj.x.v[0],
+        #        data_obj.x.in_units(data_args.x_unit).v[-1] if data_args.x_unit is not None else data_obj.x.v[-1],
+        #        data_obj.y.in_units(data_args.y_unit).v[0]  if data_args.y_unit is not None else data_obj.y.v[0],
+        #        data_obj.y.in_units(data_args.y_unit).v[-1] if data_args.y_unit is not None else data_obj.y.v[-1]]
     
         if self.cbar_label is None:
             # Figure out field unit
@@ -270,12 +277,14 @@ class DataConfig(BaseModel):
     postprocess: Optional[str] = None
 
     weight_field: Optional[tuple] = None
-    resolution: Optional[int] = None
+    resolution: Union[int, list, tuple, None] = None
     data_source: Optional[Any] = None
     density: Optional[bool] = None
     deposition: Optional[str] = None
     depth: Union[float, None, tuple] = None
     up_vector: Union[int, str, tuple, list, None] = None
+    moment: Optional[int] = None
+    force_particle_projection: Optional[bool] = None
 
     n_bins: Union[list, int, None] = None
     accumulate: Union[bool, list, None] = None
@@ -287,11 +296,14 @@ class DataConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def set_defaults(self, sim, idx):
-        if isinstance(self.center, str):
-            self.center = sim.get_derived(self.center, idx)
+        #if isinstance(self.center, str):
+        #    self.center = sim.get_derived(self.center, idx)
 
-        if isinstance(self.axis, str) and self.axis not in ["x","y","z"]:
-            self.axis = sim.get_derived(self.axis, idx)
+        #if isinstance(self.axis, str) and self.axis not in ["x","y","z"]:
+        #    self.axis = sim.get_derived(self.axis, idx)
+
+        if isinstance(self.resolution, int):
+            self.resolution = [self.resolution, self.resolution]
 
         if isinstance(self.up_vector, str) and self.up_vector not in ["x","y","z"]:
             self.up_vector = np.array(sim.get_derived(self.up_vector, idx))

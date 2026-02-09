@@ -17,6 +17,7 @@ plotting_fn:
       data_args:
         x_unit: kpc
         y_unit: kpc
+        resolution: 400
   slice:
     params:
       data_args:
@@ -44,6 +45,7 @@ data_fn:
         resolution: 400
         density: True
         deposition: "cic"
+        moment: 1
   slice_frb:
     params:
       data_args:
@@ -67,6 +69,14 @@ rendering_fn:
       style_args:
         colorbar: True
         cmap: viridis
+
+  mesh:
+    params:
+      style_args:
+        colorbar: True
+        cmap: viridis
+        shading: nearest
+  
   line:
     params:
       style_args:

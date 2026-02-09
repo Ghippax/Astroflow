@@ -14,6 +14,8 @@ afLogger = get_logger()
 class ConfigError(Exception):
     pass
 
+# TODO: I'm regretting the configuration being different from default values in the functions, it would be better to just use the defaults values in functions and then override with config values. Exactly how this would work with data/style/io args defaults is not clear yet, needs reworking
+
 
 class Config:
     """

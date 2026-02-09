@@ -68,6 +68,56 @@ def image(
 
     return fig, ax
 
+@register_render("mesh")
+def mesh(
+    xdata: np.ndarray,
+    ydata: np.ndarray,
+    image: np.ndarray,
+    cmap: Optional[str] = None,
+    norm: Optional[str] = None,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    colorbar: Optional[bool] = None,
+    figsize: Iterable[int, int] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    style_args: settings.StyleConfig = None,
+) -> Tuple[Figure, Axes]:
+    """
+    Wrapper around matplotlib pcolormesh to create a figure and axes from a color mesh.
+    """
+    if style_args.ax is not None:
+        ax = style_args.ax
+        fig = ax.get_figure()
+    elif style_args.figsize is None:
+        fig, ax = plt.subplots()
+    else:
+        fig, ax = plt.subplots(figsize=style_args.figsize)
+        
+    im = ax.pcolormesh(xdata, ydata, image, cmap=style_args.cmap, norm=style_args.norm, vmin=style_args.vmin, vmax=style_args.vmax, shading=style_args.shading)
+
+    if style_args.xlog: ax.set_xscale("log")
+    if style_args.ylog: ax.set_yscale("log")
+
+    if style_args.colorbar:
+        # TODO: improve colorbar placement
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cb = fig.colorbar(im, cax=cax)
+        if style_args.cbar_label:
+            cb.set_label(style_args.cbar_label)
+
+    if style_args.xlabel:
+        ax.set_xlabel(style_args.xlabel)
+    if style_args.ylabel:
+        ax.set_ylabel(style_args.ylabel)
+    if style_args.title:
+        ax.set_title(style_args.title)
+    if style_args.grid:
+        ax.grid(style_args.grid)
+
+    return fig, ax
+
 @register_render("line")
 def line(
     x: np.ndarray,
@@ -87,7 +137,7 @@ def line(
     if style_args.xlog: ax.set_xscale("log")
     if style_args.ylog: ax.set_yscale("log")
 
-    ax.plot(x, y, style_args.style, label=style_args.label, color=style_args.color, linewidth=style_args.linewidth, markersize=style_args.markersize, alpha=style_args.alpha, **(style_args.line_kwargs or {}))
+    ax.plot(x, y, style_args.style, label=style_args.label, color=style_args.color, linewidth=style_args.linewidth, markersize=style_args.markersize, marker=style_args.marker, alpha=style_args.alpha, **(style_args.line_kwargs or {}))
 
     if style_args.xlabel:
         ax.set_xlabel(style_args.xlabel)
@@ -97,7 +147,15 @@ def line(
         ax.set_title(style_args.title)
     if style_args.grid:
         ax.grid(style_args.grid)
+
+    if style_args.xlim:
+        ax.set_xlim(style_args.xlim[0], style_args.xlim[1])
+    if style_args.ylim:
+        ax.set_ylim(style_args.ylim[0], style_args.ylim[1])
     
+    if style_args.legend:
+        ax.legend(**(style_args.legend_kwargs or {}))
+        
     return fig, ax
 
 @register_render("mosaic")
@@ -124,5 +182,6 @@ def mosaic(
     if axes is not None:
         for key, user_ax in zip(ax_dict.keys(), axes):
             ax_dict[key] = user_ax
+            print(f"Using user-provided axis for subplot '{key}', ax_dict: {ax_dict}, user_ax {user_ax}, ax_dict[key] {ax_dict[key]}")
     
     return fig, ax_dict

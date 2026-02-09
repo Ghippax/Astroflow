@@ -4,12 +4,14 @@ from typing import Any
 from yt.data_objects.time_series import DatasetSeries
 
 from .. import config
-from ..utils import serialize_units, deserialize_units
+from ..utils import serialize_units, deserialize_units, param_hash
 from .registry import sim_metadata, FunctionRegistry, SimulationMetadata
 from ..analysis.registry import derived_fn
 from ..log import get_logger
 
 afLogger = get_logger()
+
+# TODO: Eventually we need to abstract over yt entirely and just use it a backend for loading datasets. GPU accelerated out-of-memory arrays are ideal, but for this we essentially need to build an universal data format. SWIFT/GADGET/GIZMO/AREPO (maybe more) share very similar data structures, so starting with a dm/gas/star particle categorization with some standard fields (position, velocity, mass, id, maybe potential energy (also allow calculation of this) and smoothing length if applicable) would be a good start. However handling different code geometries (AREPO's voronoi for example) would be a challenge... Otherwise, yt's abstractions are excellent (geometric data objects, field system, etc). Pynbody does also very well with it's halo system (and Tangos/Caesar would be interesting to look at too), but it's not as flexible as yt in terms of loading different formats and defining custom fields, although the heuristics for particle codes loading may be even better. Scida is very important to look at as well. Some parts of our structure are very good (caching, render/data/plot system, registries, etc) but others are terrible (config system and the registry wrapper is a bit messy)
 
 class Simulation:
     """
@@ -54,6 +56,9 @@ class Simulation:
         self.metadata_file = metadata_file
         self.meta = self.metadata_file.get(name) if name else {}
         self._metadata_dirty = False
+
+        # Cache for loaded datasets
+        self._ds_cache: dict = {}
 
     def get_derived(
         self,
@@ -100,11 +105,15 @@ class Simulation:
         snaps = self.meta.setdefault("snapshots", {})
         target = snaps.setdefault(snapshot, {})
         derived = target.setdefault("derived_properties", {})
-        prop_dict = derived.setdefault(prop_name, {})
+
+        # Parameter-aware storage: derived[prop_name][param_hash] = {value, params, ...}
+        prop_group = derived.setdefault(prop_name, {})
+        phash = param_hash(kwargs)
+        prop_dict = prop_group.setdefault(phash, {})
 
         # If not forcing, return cached value if it exists
         if "value" in prop_dict and not force_recompute:
-            afLogger.debug(f"Using cached value for '{prop_name}' at snapshot {snapshot}")
+            afLogger.debug(f"Using cached value for '{prop_name}' [{phash}] at snapshot {snapshot}")
             return deserialize_units(prop_dict)
 
         # Perform calculation using the derived properties registry
@@ -172,7 +181,10 @@ class Simulation:
         return len(self.ts)
 
     def __getitem__(self, index):
-        return self.ts[index]
+        # We try to cache datasets to ensure consistent identity
+        if index not in self._ds_cache:
+            self._ds_cache[index] = self.ts[index]
+        return self._ds_cache[index]
 
     def __repr__(self):
         return f"<Simulation obj: name={self.name} frontend={self.code_name} path={self.path}>"
