@@ -31,6 +31,18 @@ def compute_redshift(sim, snap_idx: int):
     redshift = ds.current_redshift
     return redshift
 
+@register_derived("scale_factor")
+def compute_scale_factor(sim, snap_idx: int):
+    ds = sim[snap_idx]
+    redshift = ds.current_redshift
+    return 1.0 / (1.0 + redshift)
+
+@register_derived("time")
+def compute_time(sim, snap_idx: int):
+    ds = sim[snap_idx]
+    time = ds.current_time.to("Gyr")
+    return time
+
 # TODO: The see option here should give you a zoom-in plot (like recent Hopkins's BH super-refiniment plots) of the centers up to a bit more than the radius used (and indicate the radius with a circle)
 @register_derived("center_com_it",set_config={"center": None,"iterations":10,"bounds":None,"see": False,"com_kwargs":{"use_gas":False,"use_particles":True}})
 def compute_center_it(sim, snap_idx: int, center = None, iterations=None, bounds = None, see = None, com_kwargs={}):
@@ -47,7 +59,7 @@ def compute_center_it(sim, snap_idx: int, center = None, iterations=None, bounds
         sp     = ds.sphere(centerTemp, (sizeSphere[i],"Mpc"))
         if see:
             afLogger.info(f"Iteration {i+1}: Plotting density projection...")
-            plot.proj(sim, snap_idx, center=centerTemp, width=(sizeSphere[i],"Mpc"), field=("gas","density"), save = False, show = True)
+            plot.proj(sim.snap[snap_idx], center=centerTemp, width=(sizeSphere[i],"Mpc"), field=("gas","density"), save = False, show = True)
         centerTemp = sp.quantities.center_of_mass(**com_kwargs)
         
     return unyt_array(centerTemp).to("Mpc")
@@ -75,7 +87,7 @@ def compute_center_max(sim, snap_idx, center = None, radius=5, see = None, field
 
     if see:
         afLogger.info(f"Plotting density projection...")
-        plot.proj(sim, snap_idx, center=center, width=(radius,"Mpc"), field=("gas","density"), save = False, show = True)
+        plot.proj(sim.snap[snap_idx], center=center, width=(radius,"Mpc"), field=("gas","density"), save = False, show = True)
     
     return center
 
@@ -304,7 +316,57 @@ def v_disp(sim, snap_idx, center = None, radius = None, particle=None, bins=None
     profile = data.profile(sp, (particle,"particle_position_cylindrical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="km/s", bin_extrema=[(0.2,radius)], log = True, accumulate=False, weight_field=(particle,"mass")))
     return profile.standard_deviation[field].in_units("km/s")[-1]
 
-@register_derived("cuspyness", set_config={"center": "center_default", "radius": 2, "particle":"PartType0","bins":30})
+@register_derived("min_radius", set_config={"center": "center_default", "particle":"PartType1", "N":1000, "tol":1})
+def min_particle_radius(sim, snap_idx, N=None, center=None, particle=None, tol=None):
+    """
+    Find radius (kpc) where number of `particle` enclosed is ~ N within `tol`.
+    Uses doubling to find an upper bound and then binary search.
+    Returns a radius in kpc.
+    """
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    def _count_at(r_kpc):
+        sp = ds.sphere(center, (r_kpc, "kpc"))
+        return sp[(particle, "particle_ones")].sum().to_value()
+
+    # initial bounds (kpc)
+    lo = 0.0
+    hi = 1.0 
+    # expand hi until we enclose >= N or hit a sane cap
+    max_cap = 1e4  # kpc 
+    iters = 0
+    while True:
+        cnt = _count_at(hi)
+        afLogger.debug(f"Counting particles within {hi:.2f} kpc: {cnt} found, target {N}")
+        if cnt >= N or hi >= max_cap or iters > 60:
+            break
+        hi *= 2.0
+        iters += 1
+    # if even at max cap we don't reach N, return hi
+    if cnt < N and hi >= max_cap:
+        return hi*unyt.kpc
+
+    # binary search until count within tolerance or radius precision reached
+    for _ in range(50):
+        mid = 0.5 * (lo + hi)
+        cnt_mid = _count_at(mid)
+        afLogger.debug(f"Binary search: lo={lo:.4f} kpc hi={hi:.4f} kpc, mid={mid:.4f} kpc (cnt={cnt_mid}), target {N}, tol {tol}")
+        if abs(cnt_mid - N) <= tol:
+            return mid*unyt.kpc
+        if cnt_mid < N:
+            lo = mid
+        else:
+            hi = mid
+        # stop if radius change is negligible (< pc level)
+        if (hi - lo) < 1e-4:
+            break
+
+    # final best estimate
+    return 0.5 * (lo + hi) * unyt.kpc
+
+
+@register_derived("cuspyness", set_config={"center": "center_default", "radius": 2, "particle":"PartType1","bins":30})
 def cuspyness(sim, snap_idx, center = None, radius = None, particle=None, bins=None):
     ds = sim[snap_idx]
     if isinstance(center, str):
@@ -312,25 +374,64 @@ def cuspyness(sim, snap_idx, center = None, radius = None, particle=None, bins=N
     if isinstance(radius, str):
         radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
 
-    sp = ds.sphere(center, (radius,"kpc"))
-    # TODO: Fix 0.02, should be few times epsilon
+    sp = ds.sphere(center, (2*radius,"kpc"))
+    
+    min_rad = sim.get_derived("min_radius", snap_idx, center=center, particle=particle, N=1000, tol=10).to_value() # kpc
+
     field = (particle,"Masses")
-    profile = data.profile(sp, (particle,"particle_position_spherical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/kpc**3", bin_extrema=[(max(0.02,radius - radius*0.1),radius + radius*0.1)], log = False, accumulate=False, postprocess="spherical_shell"))
+    profile = data.profile(sp, (particle,"particle_position_spherical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/kpc**3", bin_extrema=[(min(min_rad,radius - radius*0.5),radius + radius*0.5)], log = False, accumulate=False, postprocess="spherical_shell"))
 
     rho = postpro_fn.get("spherical_shell")(profile,field).in_units("Msun/kpc**3").v
     r = profile.x.in_units("kpc").v
     valid = (rho > 0) & (r > 0)
     log_rho = np.log10(rho[valid])
     log_r = np.log10(r[valid])
+    log_fid = np.log10(radius)
     
     if len(log_r) < 3:
         raise ValueError("Insufficient valid bins for derivative calculation")
     
     # Fit spline in log-log space
-    spline = UnivariateSpline(log_r, log_rho)
-    log_fid = np.log10(radius)
+    spline = UnivariateSpline(log_r, log_rho, k = 3)
+    slope = float(spline.derivative()(log_fid))
 
-    return float(spline.derivative()(log_fid))
+    return slope
+
+@register_derived("R_den", set_config={"center": "center_default", "radius": "virial_radius", "density_thresh": 1e1, "particle":"PartType0","bins":40,"axis":"faceon"})
+def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, bins=None, axis=None):
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if isinstance(radius, str):
+        radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
+    if isinstance(axis, str):
+        axis = sim.get_derived(axis, snap_idx, center=center)
+
+    sp = ds.sphere(center, (radius,"kpc"))
+    sp.set_field_parameter("normal", axis)
+
+    min_rad = sim.get_derived("min_radius", snap_idx, center=center, particle=particle, N=500, tol=10).to_value() # kpc
+
+    profile = data.profile(sp, bin_fields=(particle,"particle_position_cylindrical_radius"), field=(particle,"Masses"), data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/pc**2",  bin_extrema=[(min_rad,radius)], accumulate=False, postprocess="circular_surface", log = True))
+    
+    sigma = postpro_fn.get("circular_surface")(profile,(particle,"Masses")).in_units("Msun/pc**2").v
+    r = profile.x.in_units("kpc").v
+
+    valid = (sigma > 0) & (r > 0)
+    sigma_v = sigma[valid]
+    r_v = r[valid]
+    # Fit a spline
+    spline = UnivariateSpline(r_v, sigma_v - density_thresh, k = 3, s = 0)
+    solutions = spline.roots()
+
+    afLogger.debug(f"Finding R_den: fitted spline to sigma(r) - {density_thresh:.2e} Msun/pc^2, found roots at {solutions} kpc")
+    afLogger.debug(f"Using outermost root as R_den, between {r_v.min():.2f} and {r_v.max():.2f} kpc")
+    valid_solutions = solutions[(solutions > r_v.min()) & (solutions < r_v.max())]
+    afLogger.debug(f"Valid roots within data range: {valid_solutions} kpc")
+    if len(valid_solutions) == 0:
+        afLogger.warning("No valid roots found for R_den within data range, returning None")
+        return None
+    return float(valid_solutions.max())*unyt.kpc
 
 @register_derived("sfr_young_star", set_config={"center": "center_default", "radius": "virial_radius", "max_age": 20, "cosmology": [0.702,0.272,0.728,0.0]})
 def sfr_young_star(sim, snap_idx, center=None, radius=None, max_age=None, cosmology=None):

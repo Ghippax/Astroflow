@@ -39,7 +39,7 @@ class StyleConfig(BaseModel):
     legend_kwargs: Optional[dict] = None
 
     # Image specific
-    cmap: Optional[str] = None
+    cmap: Optional[Any] = None
     norm: Optional[str] = None
     vmin: Optional[float] = None
     vmax: Optional[float] = None
@@ -48,6 +48,7 @@ class StyleConfig(BaseModel):
     extent: Union[tuple, list, None] = None
     aspect: Optional[str] = None
     shading: Optional[str] = None
+    force_symmetry: Optional[bool] = None
 
     # Line plot specific
     label: Optional[str] = None

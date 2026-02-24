@@ -24,6 +24,7 @@ def load(
     name: Optional[str] = None,
     force_registration: bool = False,
     force_recompute: bool = False,
+    setup_hooks: Optional[list] = None,
     **kwargs,
 ) -> Simulation:
     """Return a :class:`Simulation` instance for the requested dataset.
@@ -70,8 +71,19 @@ def load(
     # Create the final Simulation object
     sim = Simulation(ts, path, name, dataset_name)
 
-    # Load additional fields
-    sim.setup_snapshots(force_recompute=force_recompute)
+    if setup_hooks:
+        for hook in setup_hooks:
+            # accepts either function (defaults) or dict config
+            if callable(hook):
+                sim.register_setup_hook(hook)
+            else:
+                sim.register_setup_hook(**hook)
+
+    # Perform initial setup (add fields, run hooks, etc)
     sim.add_fields()
+    sim.run_setup_hooks(stage="post_fields", snapshot="all")
+
+    sim.setup_snapshots(force_recompute=force_recompute)
+    sim.run_setup_hooks(stage="post_setup", snapshot="all")
 
     return sim

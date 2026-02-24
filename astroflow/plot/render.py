@@ -47,7 +47,31 @@ def image(
     else:
         fig, ax = plt.subplots(figsize=style_args.figsize)
 
-    im = ax.imshow(image, cmap=style_args.cmap, norm=style_args.norm, vmin=style_args.vmin, vmax=style_args.vmax, extent=style_args.extent, aspect=style_args.aspect)
+    # Determine vmin and vmax if not provided, using percentiles of the valid data
+    good_vals = np.isfinite(image)
+    if style_args.norm == "log":
+        good_vals &= (image > 0)
+    if not np.any(good_vals):
+        afLogger.warning("No valid values found for rendering, check your data and style arguments")
+        afLogger.debug(f"Image stats: min {np.nanmin(image)}, max {np.nanmax(image)}, mean {np.nanmean(image)}, median {np.nanmedian(image)}, std {np.nanstd(image)}")
+        afLogger.debug(f"Image array: {image}")
+    vals = image[good_vals]
+    vmin = np.nanpercentile(vals, 1) if style_args.vmin is None else style_args.vmin
+    vmax = np.nanpercentile(vals, 99) if style_args.vmax is None else style_args.vmax
+    if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
+        afLogger.warning(f"Invalid vmin/vmax values: {vmin}, {vmax}. Using 0.1, 1 instead.")
+        vmin = 0.1
+        vmax = 1
+        
+    # Force symmetry around zero if requested
+    if style_args.force_symmetry is not None:
+        m = max(abs(vmin), abs(vmax))
+        vmin = -m
+        vmax = m
+        
+    afLogger.debug(f"Rendering image with vmin={vmin}, vmax={vmax}, norm={style_args.norm}")
+
+    im = ax.imshow(image, cmap=style_args.cmap, norm=style_args.norm, vmin=vmin, vmax=vmax, extent=style_args.extent, aspect=style_args.aspect)
 
     if style_args.colorbar:
         # TODO: improve colorbar placement

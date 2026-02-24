@@ -23,8 +23,7 @@ Plotting API: They output/save final plots or animations, generated with plot_da
 
 @register_plot("slice")
 def slice(
-    sim,
-    idx,
+    snapshot,
     field,
     # Shortcuts
     center: Optional[str] = None,
@@ -40,6 +39,7 @@ def slice(
     """
     Plot a slice of a simulation field.
     """
+    sim, idx = snapshot.sim, snapshot.idx
     # Prepare data
     data_args.set_defaults(sim, idx)
     frb = data.slice_frb(sim[idx], field, center=data_args.center, data_args=data_args)
@@ -54,8 +54,7 @@ def slice(
 
 @register_plot("proj")
 def proj(
-    sim,
-    idx,
+    snapshot,
     field,
     # Shortcuts
     axis: Optional[Union[int, list, tuple, str]] = None,
@@ -73,7 +72,7 @@ def proj(
     """
     Plot a projection of a simulation field.
     """
-
+    sim, idx = snapshot.sim, snapshot.idx
     # Prepare data
     data_args.set_defaults(sim, idx)
     frb = data.proj_frb(sim[idx], field, center=data_args.center, data_args=data_args)
