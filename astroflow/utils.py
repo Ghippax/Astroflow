@@ -12,21 +12,27 @@ afLogger = get_logger()
 
 # Return unyt arrays to their original form when loading from metadata. In case of None unit, unyt correctly returns a dimensionless object
 def deserialize_units(d):
+    if isinstance(d, dict) and d.get("unit") == "__tuple__" and "value" in d:
+        return tuple(deserialize_units(v) for v in d["value"])
     if isinstance(d, dict) and "value" in d and "unit" in d:
         if isinstance(d["value"], (list, tuple, np.ndarray)):
             return unyt_array(np.array(d["value"]), d["unit"])
         elif isinstance(d["value"], (float, int)):
             return unyt_quantity(d["value"], d["unit"])
+        else:
+            return d["value"]
     return d
 
 # Convert unyt arrays to a serializable form for metadata storage
 def serialize_units(val):
+    if isinstance(val, tuple):
+        return {"value": [serialize_units(v) for v in val], "unit": "__tuple__"}
     if isinstance(val, unyt_array):
         return {"value": val.value.tolist(), "unit": str(val.units)}
     elif isinstance(val, unyt_quantity):
         return {"value": val.value, "unit": str(val.units)}
-    elif val is None: # TODO: Check, may break things
-        return None
+    elif val is None:
+        return {"value": None, "unit": "dimensionless"}
     elif not isinstance(val, Iterable):
         return {"value": float(val), "unit": "dimensionless"}
     return val

@@ -56,8 +56,8 @@ def image(
         afLogger.debug(f"Image stats: min {np.nanmin(image)}, max {np.nanmax(image)}, mean {np.nanmean(image)}, median {np.nanmedian(image)}, std {np.nanstd(image)}")
         afLogger.debug(f"Image array: {image}")
     vals = image[good_vals]
-    vmin = np.nanpercentile(vals, 1) if style_args.vmin is None else style_args.vmin
-    vmax = np.nanpercentile(vals, 99) if style_args.vmax is None else style_args.vmax
+    vmin = np.nanpercentile(vals, 0.5) if style_args.vmin is None else style_args.vmin
+    vmax = np.nanpercentile(vals, 99.5) if style_args.vmax is None else style_args.vmax
     if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
         afLogger.warning(f"Invalid vmin/vmax values: {vmin}, {vmax}. Using 0.1, 1 instead.")
         vmin = 0.1
@@ -71,7 +71,7 @@ def image(
         
     afLogger.debug(f"Rendering image with vmin={vmin}, vmax={vmax}, norm={style_args.norm}")
 
-    im = ax.imshow(image, cmap=style_args.cmap, norm=style_args.norm, vmin=vmin, vmax=vmax, extent=style_args.extent, aspect=style_args.aspect)
+    im = ax.imshow(image, cmap=style_args.cmap, norm=style_args.norm, vmin=vmin, vmax=vmax, extent=style_args.extent, aspect=style_args.aspect, origin=style_args.origin)
 
     if style_args.colorbar:
         # TODO: improve colorbar placement
@@ -125,9 +125,9 @@ def mesh(
 
     if style_args.colorbar:
         # TODO: improve colorbar placement
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cb = fig.colorbar(im, cax=cax)
+        #divider = make_axes_locatable(ax)
+        #cax = divider.append_axes("right", size="5%", pad=0.05)
+        cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, location="right")
         if style_args.cbar_label:
             cb.set_label(style_args.cbar_label)
 

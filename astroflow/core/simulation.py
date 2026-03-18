@@ -66,6 +66,8 @@ class Simulation:
         # Handles z/a/t mapping to index and snapshot access patterns
         self._timeline: list[dict[str, float]] | None = None
         self.snap = _SnapshotAccessor(self)
+        # Temporary storage for non-derived named values (e.g., from analysis) that we want to be able to retrieve by name and snapshot but don't want to persist in metadata
+        self.temp: list[dict[str, Any]] = [{} for _ in range(len(self.ts))]
         
 
     def register_setup_hook(
@@ -101,10 +103,9 @@ class Simulation:
             return
         idxs = range(len(self.ts)) if snapshot == "all" else [snapshot]
         for i in idxs:
-            ds = self[i]
             for h in hooks:
                 if h["scope"] == "snapshot":
-                    h["fn"](self, i, ds)
+                    h["fn"](self, i)
 
     def build_timeline(self, force: bool = False) -> list[dict[str, float]]:
         """Build internal snapshot table with idx/z/a/t_gyr."""
@@ -244,8 +245,8 @@ class Simulation:
             key, v0, v1 = "a", float(a[0]), float(a[1])
         else:
             key = "t_gyr"
-            v0 = self._to_gyr_value(t[0], unit)
-            v1 = self._to_gyr_value(t[1], unit)
+            v0 = _to_gyr_value(t[0], unit)
+            v1 = _to_gyr_value(t[1], unit)
     
         # Create the range with stepping and tolerance
         vals = np.asarray([row[key] for row in tl], dtype=float)
@@ -346,9 +347,19 @@ class Simulation:
 
         # If not forcing, return cached value if it exists
         if "value" in prop_dict and not force_recompute:
-            afLogger.debug(f"Using cached value for '{prop_name}' [{phash}] at snapshot {snapshot}")
+            afLogger.info(f"Using cached value for '{prop_name}' [{phash}] at snapshot {snapshot}")
             if label:
                 named = target.setdefault("named_derived", {})
+                if label in named:
+                    existing = named[label]
+                    if existing["prop"] != prop_name or existing["hash"] != phash:
+                        afLogger.warning(
+                            f"Label '{label}' at snapshot {snapshot} already points to "
+                            f"{existing['prop']} [{existing['hash']}], but now trying to assign "
+                            f"{prop_name} [{phash}]. Overwriting label mapping.")
+                    else:
+                        return deserialize_units(prop_dict)
+                        
                 named[label] = {"prop": prop_name, "hash": phash}
                 self._metadata_dirty = True
                 if auto_save:
@@ -383,6 +394,7 @@ class Simulation:
             named = target.setdefault("named_derived", {})
             named[label] = {"prop": prop_name, "hash": phash}
 
+        # If we get here then we have updated metadata that needs to be saved
         self._metadata_dirty = True
         
         if auto_save:
@@ -408,6 +420,9 @@ class Simulation:
         target = snaps.setdefault(snapshot, {})
         named = target.get("named_derived", {})
         if label not in named:
+            try_temp = self.temp[snapshot].get(label,None)
+            if try_temp is not None:
+                return try_temp
             raise KeyError(f"Named derived '{label}' not found at snapshot {snapshot}")
         ref = named[label]
         derived = target.get("derived_properties", {})
@@ -468,12 +483,24 @@ class _NamedProxy:
 
     def __getattr__(self, label: str):
         return self._sim.get_named(self._idx, label)
+    
+class _TempProxy:
+    def __init__(self, sim: Simulation, idx: int):
+        self._sim = sim
+        self._idx = idx
+
+    def __getattr__(self, label: str):
+        def _setter(value: Any):
+            self._sim.temp[self._idx][label] = value
+        return _setter
+    
 class _SnapshotView:
     def __init__(self, sim: Simulation, idx: int):
         self.sim = sim
         self.idx = idx
         self.d = _DerivedProxy(sim, idx)  # computed access
         self.v = _NamedProxy(sim, idx)    # named access
+        self.t = _TempProxy(sim, idx)     # temporary access
 
     @property
     def ds(self):
@@ -505,7 +532,7 @@ class _SnapshotAccessor:
         j = self._sim.sel(return_idx=True, **selector_kwargs)
         return self._sim[j]
     
-def _to_gyr_value(self, t, unit: str = "Gyr") -> float:
+def _to_gyr_value(t, unit: str = "Gyr") -> float:
     """Accept float or quantity-like time and return value in Gyr."""
     if hasattr(t, "to"):
         return float(t.to("Gyr").to_value())

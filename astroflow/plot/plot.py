@@ -83,7 +83,7 @@ def proj(
     fig, ax = render.image(frb_arr, style_args=style_args)
     io_args.set_defaults("proj", field)
     
-    return output(fig, ax, io_args)
+    return output(fig, ax, io_args, data = frb_arr)
 
 # TODO: sim,idx syntax is not very elegant, need a way to enable time/redshift sim slicing (could be a method of the sim object that returns dataset, issue is plot functions do need the sim object for other things)
 @register_plot("profile")
@@ -132,10 +132,10 @@ def profile(
 
     # Output
     io_args.set_defaults("profile", field)
-    return output(fig, ax, io_args)
+    return output(fig, ax, io_args, data = final_data)
 
 @register_plot("output")
-def output(fig, ax, io_args: settings.IOConfig):
+def output(fig, ax, io_args: settings.IOConfig, data = None):
     """Handle showing and saving of figures based on IOConfig."""
     if io_args.show and not io_args.return_fig:
         plt.show()
@@ -143,6 +143,9 @@ def output(fig, ax, io_args: settings.IOConfig):
     if io_args.save:
         fig.savefig(io_args.path)
         plt.close(fig)
+
+    if io_args.return_data:
+        return data
 
     if io_args.return_fig:
         return (fig, ax)

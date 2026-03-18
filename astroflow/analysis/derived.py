@@ -7,6 +7,7 @@ import yt
 import unyt
 from unyt import unyt_array
 import h5py
+import matplotlib.pyplot as plt
 
 from scipy.interpolate import UnivariateSpline
 from .registry import postpro_fn
@@ -189,6 +190,16 @@ def total_in_obj(data, field):
     total = data.quantities.total_quantity(field)
     return total
 
+@register_derived("total_in_sphere", set_config={"center": "center_default", "radius": 10, "field": ("all","particle_ones")})
+def total_in_sphere(sim, snap_idx, center = None, radius = None, field = None):
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if isinstance(radius, str):
+        radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
+    sp = ds.sphere(center, (radius,"kpc"))
+    return total_in_obj(sp, field)
+
 @register_derived("half_mass_radius", set_config={"center": "center_default", "particle": "PartType4", "radius": None})
 def half_radius(sim, snap_idx, center = None, particle = None, radius = None):
     # Setup sphere and calculate target half mass
@@ -214,6 +225,33 @@ def half_radius(sim, snap_idx, center = None, particle = None, radius = None):
         afLogger.warning(f"Half-mass radius determination may be inaccurate: enclosed mass at r_half is {cumM[idxAtHalf]:.3E} Msun vs target {half_mass:.3E} Msun")
 
     afLogger.debug(f"Found half-mass radius: {rSort[idxAtHalf]:.3f} kpc, enclosing {cumM[idxAtHalf]:.3E} Msun, with target {half_mass:.3E} Msun")
+    return rSort[idxAtHalf]*unyt.kpc
+
+@register_derived("percent_mass_radius", set_config={"center": "center_default", "particle": "PartType4", "radius": None, "percent": 0.9})
+def percent_radius(sim, snap_idx, center = None, particle = None, radius = None, percent = None):
+    # Setup sphere and calculate target half mass
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if radius is None:
+        radius = sim.get_derived("virial_radius", snap_idx, center=center).to_value()
+    sp = ds.sphere(center, (radius,"kpc"))
+    afLogger.debug(f"Calculating percent-mass radius for snapshot {snap_idx} using particle type {particle} within radius {radius}")
+    total_mass = total_in_obj(sp, (particle,"Masses")).to("Msun").v
+    part_mass = total_mass * percent
+
+    allMass    = sp[(particle,"Masses")].in_units("Msun")
+    allR       = sp[(particle,"particle_position_spherical_radius")].to("kpc")
+    idx   = np.argsort(allR)
+    mSort = np.array(allMass)[idx]
+    rSort = np.array(allR)[idx]
+    cumM  = np.cumsum(mSort)
+
+    idxAtHalf = np.argmin(np.abs(cumM - part_mass))
+    if (cumM[idxAtHalf]-part_mass)/part_mass > 0.1:
+        afLogger.warning(f"Percent-mass radius determination may be inaccurate: enclosed mass at r_{percent*100:.0f} is {cumM[idxAtHalf]:.3E} Msun vs target {part_mass:.3E} Msun")
+
+    afLogger.info(f"Found percent-mass radius: {rSort[idxAtHalf]:.3f} kpc, enclosing {cumM[idxAtHalf]:.3E} Msun, with target {part_mass:.3E} Msun")
     return rSort[idxAtHalf]*unyt.kpc
 
 register_alias("radius_e_star", "half_mass_radius", particle="PartType4")
@@ -376,7 +414,7 @@ def cuspyness(sim, snap_idx, center = None, radius = None, particle=None, bins=N
 
     sp = ds.sphere(center, (2*radius,"kpc"))
     
-    min_rad = sim.get_derived("min_radius", snap_idx, center=center, particle=particle, N=1000, tol=10).to_value() # kpc
+    min_rad = sim.get_derived("min_radius", snap_idx, center=center, particle="all", N=1000, tol=10).to_value() # kpc
 
     field = (particle,"Masses")
     profile = data.profile(sp, (particle,"particle_position_spherical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/kpc**3", bin_extrema=[(min(min_rad,radius - radius*0.5),radius + radius*0.5)], log = False, accumulate=False, postprocess="spherical_shell"))
@@ -397,8 +435,8 @@ def cuspyness(sim, snap_idx, center = None, radius = None, particle=None, bins=N
 
     return slope
 
-@register_derived("R_den", set_config={"center": "center_default", "radius": "virial_radius", "density_thresh": 1e1, "particle":"PartType0","bins":40,"axis":"faceon"})
-def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, bins=None, axis=None):
+@register_derived("R_den", set_config={"center": "center_default", "radius": "virial_radius", "density_thresh": 1e1, "particle":"PartType0","bins":40,"axis":"faceon","min_N_radius":1000})
+def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, bins=None, axis=None, min_N_radius=None):
     ds = sim[snap_idx]
     if isinstance(center, str):
         center = sim.get_derived(center, snap_idx)
@@ -410,7 +448,7 @@ def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, pa
     sp = ds.sphere(center, (radius,"kpc"))
     sp.set_field_parameter("normal", axis)
 
-    min_rad = sim.get_derived("min_radius", snap_idx, center=center, particle=particle, N=500, tol=10).to_value() # kpc
+    min_rad = sim.get_derived("min_radius", snap_idx, center=center, particle="all", N=min_N_radius, tol=50).to_value() # kpc
 
     profile = data.profile(sp, bin_fields=(particle,"particle_position_cylindrical_radius"), field=(particle,"Masses"), data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/pc**2",  bin_extrema=[(min_rad,radius)], accumulate=False, postprocess="circular_surface", log = True))
     
@@ -421,17 +459,76 @@ def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, pa
     sigma_v = sigma[valid]
     r_v = r[valid]
     # Fit a spline
+    if len(r_v) < 4:
+        afLogger.warning("Not enough valid bins to fit spline for R_den determination, returning 0")
+        return 0
     spline = UnivariateSpline(r_v, sigma_v - density_thresh, k = 3, s = 0)
     solutions = spline.roots()
 
-    afLogger.debug(f"Finding R_den: fitted spline to sigma(r) - {density_thresh:.2e} Msun/pc^2, found roots at {solutions} kpc")
-    afLogger.debug(f"Using outermost root as R_den, between {r_v.min():.2f} and {r_v.max():.2f} kpc")
+    afLogger.info(f"Finding R_den {particle}: fitted spline to sigma(r) - {density_thresh:.2e} Msun/pc^2, found roots at {solutions} kpc")
+    afLogger.info(f"Using outermost root as R_den, between {r_v.min():.2f} and {r_v.max():.2f} kpc")
     valid_solutions = solutions[(solutions > r_v.min()) & (solutions < r_v.max())]
-    afLogger.debug(f"Valid roots within data range: {valid_solutions} kpc")
+    afLogger.info(f"Valid roots within data range: {valid_solutions} kpc")
     if len(valid_solutions) == 0:
-        afLogger.warning("No valid roots found for R_den within data range, returning None")
-        return None
+        fig, ax = plt.subplots()
+        spline_rv = UnivariateSpline(r_v, sigma_v, k = 3, s = 0)
+        ax.loglog(r_v, spline_rv(r_v), label="Spline fit")
+        ax.loglog(r_v, sigma_v, "go", label="Sigma(r)")
+        ax.axhline(density_thresh, color="red", linestyle="--", label=f"({density_thresh:.2e} Msun/pc**2)")
+        ax.set_xlabel("Radius (kpc)")
+        ax.set_ylabel("Surface Density (Msun/pc**2)")
+        ax.set_title(f"R_den determination for snap {snap_idx} with particle {particle}")
+        ax.legend()
+        plt.show()
+        afLogger.warning("No valid roots found for R_den within data range, returning 0")
+        return 0
     return float(valid_solutions.max())*unyt.kpc
+
+@register_derived("principal_axes", set_config={"center": "center_default", "radius": "virial_radius", "particle":"PartType0", "initial_q": 1, "initial_s": 1, "max_it": 20, "tol": 1e-3})
+def principal_axes(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, initial_q = None, initial_s = None, max_it = None, tol = None):
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if isinstance(radius, str):
+        radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
+
+    sp = ds.sphere(center, (radius,"kpc"))
+    # Initial guess
+    q, s = initial_q, initial_s
+
+    for it in range(max_it):
+        sp.set_field_parameter("q", q)
+        sp.set_field_parameter("s", s)
+        
+        w = (particle, "particle_mass")
+        Sxx = sp.quantities.weighted_average_quantity((particle, "s_xx"), weight=w).to_value()
+        Syy = sp.quantities.weighted_average_quantity((particle, "s_yy"), weight=w).to_value()
+        Szz = sp.quantities.weighted_average_quantity((particle, "s_zz"), weight=w).to_value()
+        Sxy = sp.quantities.weighted_average_quantity((particle, "s_xy"), weight=w).to_value()
+        Sxz = sp.quantities.weighted_average_quantity((particle, "s_xz"), weight=w).to_value()
+        Syz = sp.quantities.weighted_average_quantity((particle, "s_yz"), weight=w).to_value()
+
+        M = np.array([[Sxx, Sxy, Sxz],
+                    [Sxy, Syy, Syz],
+                    [Sxz, Syz, Szz]], dtype=float)
+
+        # eigvals sorted
+        lam = np.sort(np.linalg.eigvalsh(M))[::-1]
+        A, B, C = np.sqrt(lam)   # proportional axis lengths
+        q_new = B / A
+        s_new = C / A
+        afLogger.info(f"Particle {particle}, Iter {it}: q={q_new:.4f}, s={s_new:.4f}, A = {A}, B = {B}, C = {C}")
+
+        if abs(q_new - q) < tol and abs(s_new - s) < tol:
+            q, s = q_new, s_new
+            afLogger.info(f"Converged at iter {it}: q={q:.4f}, s={s:.4f}")
+            break
+        q, s = q_new, s_new
+
+    a = A *unyt.kpc
+    b = B *unyt.kpc
+    c = C *unyt.kpc
+    return (a,b,c)
 
 @register_derived("sfr_young_star", set_config={"center": "center_default", "radius": "virial_radius", "max_age": 20, "cosmology": [0.702,0.272,0.728,0.0]})
 def sfr_young_star(sim, snap_idx, center=None, radius=None, max_age=None, cosmology=None):
@@ -476,4 +573,4 @@ def most_bound_pos(sim, snap_idx, path = None, idx = None, particle_type = None)
         idbound = f["Subhalo/SubhaloIDMostbound"][idx]
         ad = sim[snap_idx].all_data()
         mask = ad[("all","ParticleIDs")] == idbound
-        return ad[("all","particle_position")][mask][0].to("Mpc")
+        return ad[("aFl","particle_position")][mask][0].to("Mpc")

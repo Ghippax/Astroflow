@@ -21,6 +21,7 @@ class IOConfig(BaseModel):
     show: Optional[bool] = None
     return_fig: Optional[bool] = None
     path: Optional[str] = None
+    return_data: Optional[bool] = False
 
     def set_defaults(self, plot_type, field):
         if self.path is None and self.save:
@@ -49,6 +50,7 @@ class StyleConfig(BaseModel):
     aspect: Optional[str] = None
     shading: Optional[str] = None
     force_symmetry: Optional[bool] = None
+    origin: Optional[str] = None
 
     # Line plot specific
     label: Optional[str] = None
