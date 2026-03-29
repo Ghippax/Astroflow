@@ -59,6 +59,7 @@ class StyleConfig(BaseModel):
     color: Union[str,list,tuple,None] = None
     style: Optional[str] = None
     linewidth: Optional[float] = None
+    linestyle: Optional[str] = None
     markersize: Optional[float] = None
     marker: Optional[str] = None
     alpha: Optional[float] = None
@@ -295,6 +296,7 @@ class DataConfig(BaseModel):
     bin_extrema: Union[None, list, tuple] = None
     set_bins: Union[None, list, tuple] = None
     log: Optional[bool] = None
+    x_data: Union[None, Any] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

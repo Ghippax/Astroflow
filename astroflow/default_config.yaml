@@ -80,7 +80,7 @@ rendering_fn:
   line:
     params:
       style_args:
-        style: ""
+        style: None
 
 derived_prop_fn:
   center_default:

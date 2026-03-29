@@ -161,7 +161,7 @@ def line(
     if style_args.xlog: ax.set_xscale("log")
     if style_args.ylog: ax.set_yscale("log")
 
-    ax.plot(x, y, style_args.style, label=style_args.label, color=style_args.color, linewidth=style_args.linewidth, markersize=style_args.markersize, marker=style_args.marker, alpha=style_args.alpha, **(style_args.line_kwargs or {}))
+    ax.plot(x, y, style_args.style, label=style_args.label, color=style_args.color, linewidth=style_args.linewidth, markersize=style_args.markersize, marker=style_args.marker, alpha=style_args.alpha, linestyle=style_args.linestyle, **(style_args.line_kwargs or {}))
 
     if style_args.xlabel:
         ax.set_xlabel(style_args.xlabel)

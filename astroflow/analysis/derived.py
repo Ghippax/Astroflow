@@ -525,10 +525,104 @@ def principal_axes(sim, snap_idx, center = None, density_thresh = None, radius =
             break
         q, s = q_new, s_new
 
-    a = A *unyt.kpc
-    b = B *unyt.kpc
-    c = C *unyt.kpc
-    return (a,b,c)
+    return (A,B,C)
+
+def _inertia_tensor_spectra(pos, mass):
+    """Calculates eigenvalues and eigenvectors for the inertia tensor for a given list of masses and positions"""
+    # S_ij = sum_n m_n * x_{n,i} * x_{n,j}
+    s = np.einsum("ni,nj,n->ij", pos, pos, mass, optimize=True)
+    tr = np.trace(s)
+    I_tensor = tr * np.eye(3, dtype=s.dtype) - s # I = tr(S) * identity - S
+
+    return np.linalg.eigh(I_tensor)
+
+@register_derived("shape_ceverino", set_config={"radius": 2.0, "particle": "PartType4", "n_neighbors": 80, "max_iter": 10, "shell_dr":0.1})
+def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_neighbors=None, max_iter=None, shell_dr = None):
+    from scipy.spatial import cKDTree
+    """
+    Implements the Ceverino et al. (2015) 3D Isodensity Shape Fitting algorithm.
+    """
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if isinstance(radius, str):
+        radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
+
+    # We grab a sphere 2x the target radius to ensure we capture all the particles (and neighbours)
+    sp = ds.sphere(center, (radius * 2, "kpc"))
+    pos = sp[(particle, "relative_particle_position")].to("kpc").v
+    masses = sp[(particle, "Masses")].to("Msun").v
+
+    if len(pos) < n_neighbors * 2:
+        afLogger.warning(f"Not enough particles to compute shape at r={radius} kpc.")
+        return (1, 1, 1, [1,0,0], [0,1,0], [0,0,1])
+
+    # Local Density Calculation (80 nearest neighbors)
+    tree = cKDTree(pos)
+    dists, neighbor_idx = tree.query(pos, k=n_neighbors)
+    r_80 = dists[:, -1]
+    
+    # Density = Mass of 80 neighbors / Volume
+    m_80 = np.sum(masses[neighbor_idx], axis=1)
+    vols = (4.0 / 3.0) * np.pi * (r_80**3)
+    local_rho = m_80 / (vols + 1e-20)
+
+    # Initial Guess: Standard inertia tensor of a thin spherical shell at radius r
+    dr = shell_dr # kpc
+    particle_rad = np.linalg.norm(pos, axis=1)
+    shell_mask = (particle_rad > radius - dr) & (particle_rad < radius + dr)
+    if np.sum(shell_mask) < 10:
+        afLogger.warning(f"Initial shell has too few particles: N = {np.sum(shell_mask)}")
+    p_shell = pos[shell_mask]
+    m_shell = masses[shell_mask]
+    evals, evecs = _inertia_tensor_spectra(p_shell, m_shell)
+    # Major axis is eigenvector of smallest eigenvalue for classical inertia tensor
+    sort_idx = np.argsort(evals)
+    major_axis = evecs[:, sort_idx[0]]
+    e1, e2, e3 = evals[sort_idx]
+    a = np.sqrt(np.abs(1.5 * (e3 + e2 - e1)))
+    b = np.sqrt(np.abs(1.5 * (e3 + e1 - e2)))
+    c = np.sqrt(np.abs(1.5 * (e2 + e1 - e3)))
+    afLogger.info(f"Shape at iteration 0: b/a={b/a:.3f}, c/a={c/a:.3f}, a = {a:.3f}, b = {b:.3f}, c = {c:.3f}")
+    # Iterative Isodensity Fitting
+    for iteration in range(max_iter):
+        # Find points where major axis intersects the sphere of radius r
+        pole_1 = major_axis * radius
+        pole_2 = -major_axis * radius
+        # Find the single closest particle to each pole to get the target density
+        _, idx_1 = tree.query(pole_1, k=1)
+        _, idx_2 = tree.query(pole_2, k=1)
+        rho_1 = local_rho[idx_1]
+        rho_2 = local_rho[idx_2]
+        rho_s = (rho_1 + rho_2) / 2.0
+        sigma_s = max(np.abs(rho_1 - rho_2) / 2.0, 0.1 * rho_s) # Use at least 10 percent if sigma is tiny
+        # Isolate the isodensity shell
+        iso_mask = (local_rho > (rho_s - sigma_s)) & (local_rho < (rho_s + sigma_s))
+        if np.sum(iso_mask) < 10:
+            afLogger.warning(f"Isodensity shell empty at iteration {iteration+1}. Stopping.")
+            break
+        p_iso = pos[iso_mask]
+        m_iso = masses[iso_mask]
+        # Calculate Classical Inertia Tensor of the isodensity shell
+        e, v = _inertia_tensor_spectra(p_iso, m_iso)
+        sort_idx = np.argsort(e) # Sort eigenvalues: e[0] < e[1] < e[2]
+        e1, e2, e3 = e[sort_idx]
+        # Calculate Routh (2013) axes lengths for a thin ellipsoidal shell
+        # Use abs() to prevent sqrt of negative numbers due to precision errors on very spherical halos
+        a = np.sqrt(np.abs(1.5 * (e3 + e2 - e1)))
+        b = np.sqrt(np.abs(1.5 * (e3 + e1 - e2)))
+        c = np.sqrt(np.abs(1.5 * (e2 + e1 - e3)))
+        afLogger.info(f"Shape at iteration {iteration+1}: b/a={b/a:.3f}, c/a={c/a:.3f}, a = {a:.3f}, b = {b:.3f}, c = {c:.3f}")   
+        # Update major axis
+        new_major_axis = v[:, sort_idx[0]]        
+        if np.abs(np.dot(major_axis, new_major_axis)) > 0.99:
+            major_axis = new_major_axis
+            break
+            
+        major_axis = new_major_axis
+
+    afLogger.info(f"Shape at r={radius:.2f} kpc: b/a={b/a:.3f}, c/a={c/a:.3f}")    
+    return (a, b, c, v[sort_idx[0]].tolist(), v[sort_idx[1]].tolist(), v[sort_idx[2]].tolist())
 
 @register_derived("sfr_young_star", set_config={"center": "center_default", "radius": "virial_radius", "max_age": 20, "cosmology": [0.702,0.272,0.728,0.0]})
 def sfr_young_star(sim, snap_idx, center=None, radius=None, max_age=None, cosmology=None):

@@ -151,4 +151,6 @@ def profile(
         units=units,
     )
 
+    profile.x = data_args.x_data if data_args.x_data is not None else profile.x
+
     return profile
