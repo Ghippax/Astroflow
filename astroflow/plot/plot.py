@@ -111,7 +111,8 @@ def profile(
     profiled_data = profile[field]
 
     if data_args.postprocess is not None:
-        profiled_data = postpro_fn.get(data_args.postprocess)(profile,field)
+        postprocess_kwargs = data_args.postprocess_kwargs or {}
+        profiled_data = postpro_fn.get(data_args.postprocess)(profile, field, **postprocess_kwargs)
 
     final_data = profiled_data.in_units(data_args.unit).v if data_args.unit is not None else profiled_data.v
 

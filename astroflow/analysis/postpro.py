@@ -4,6 +4,7 @@ from .registry import register_postprocessing
 from . import settings
 
 import numpy as np
+import yt
 from unyt import unyt_array, G
 
 from ..log import get_logger
@@ -42,6 +43,55 @@ def full_circ_surface(profile,field):
     area = np.pi * edges[1:]**2
 
     return mass/area
+
+@register_postprocessing("sfh", label="SFR")
+def sfh(profile, field, cosmology=None, time_unit="Myr", as_lookback=True):
+    """
+    Convert a profile of stellar mass binned in scale factor into a SFH.
+
+    Notes
+    -----
+    - Expects ``profile`` to be built with ``bin_field=('PartType4', 'StellarFormationTime')``
+      and ``field=('PartType4', 'Masses')``.
+    - Cosmology integrals are evaluated only at bin edges (not particle-by-particle).
+    - Updates ``profile.x`` to the returned time coordinate so ``plot.profile`` uses
+      the correct x-axis labels.
+    """
+    if cosmology is None:
+        ds = profile.ds
+        cosmology = [
+            float(getattr(ds, "hubble_constant", 0.702)),
+            float(getattr(ds, "omega_matter", 0.272)),
+            float(getattr(ds, "omega_lambda", 0.728)),
+            float(getattr(ds, "omega_curvature", 0.0)),
+        ]
+
+    co = yt.utilities.cosmology.Cosmology(
+        hubble_constant=cosmology[0],
+        omega_matter=cosmology[1],
+        omega_lambda=cosmology[2],
+        omega_curvature=cosmology[3],
+    )
+
+    # Use bin edges for cosmology conversion to avoid expensive per-particle work.
+    z_edges   = (1.0 / np.clip(np.asarray(profile.x_bins, dtype=float), 1e-8, None)) - 1.0
+    z_centers = (1.0 / np.clip(np.asarray(profile.x, dtype=float), 1e-8, None)) - 1.0
+    t_edges   = unyt_array([co.t_from_z(float(z)).to(time_unit) for z in z_edges],time_unit)
+    t_centers = unyt_array([co.t_from_z(float(z)).to(time_unit) for z in z_centers], time_unit)
+
+    mass_per_bin = profile[field].to("Msun")
+    dt_yr = np.abs(np.diff(t_edges)).to("yr")
+    sfr = (mass_per_bin / dt_yr)
+
+    if as_lookback:
+        current_t = profile.ds.current_time.to(time_unit)
+        xvals = current_t - t_centers
+    else:
+        xvals = t_centers
+
+    order = np.argsort(xvals)
+    profile.x = unyt_array(xvals[order], time_unit)
+    return sfr[order]
 
 # TODO: This postprocessing is out of place (no profile usage). Need a way to chain postprocessings (for modularity). This probably involves altering the yt profile object to update after each postprocess and then enabling postprocessing lists in plot.profile
 @register_postprocessing("log_spline_derivative", label = "Slope")

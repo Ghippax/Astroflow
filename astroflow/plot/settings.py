@@ -279,6 +279,7 @@ class DataConfig(BaseModel):
     z_unit: Optional[str] = None
     unit: Optional[str] = None
     postprocess: Optional[str] = None
+    postprocess_kwargs: Optional[dict] = None
 
     weight_field: Optional[tuple] = None
     resolution: Union[int, list, tuple, None] = None

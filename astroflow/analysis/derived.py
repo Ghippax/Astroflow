@@ -76,6 +76,17 @@ def bulk_velocity(sim, snap_idx, center = None, radius=None, bv_kwargs={}):
         
     return bv.to("km/s")
 
+@register_derived("bulk_v_weighted",set_config={"center": "center_default","radius":10,"particle":"PartType0", "weight_field": "HI_mass"})
+def bulk_velocity_weighted(sim, snap_idx, center = None, radius=None, particle = None, weight_field = None):
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+
+    sp = ds.sphere(center, (radius,"kpc"))
+    bv = np.array([sp.quantities.weighted_average_quantity((particle,f"particle_velocity_{ax}"), weight = (particle, weight_field)).to("km/s").to_value() for ax in ['x', 'y', 'z']])
+        
+    return bv*unyt.km/unyt.s
+
 @register_derived("center_max",set_config={"center": None,"radius":5, "see": False, "field":("gas","density")})
 def compute_center_max(sim, snap_idx, center = None, radius=5, see = None, field=("gas","density")):
     ds = sim[snap_idx]
@@ -87,7 +98,7 @@ def compute_center_max(sim, snap_idx, center = None, radius=5, see = None, field
     center = unyt_array([x,y,z],"Mpc").to("Mpc")
 
     if see:
-        afLogger.info(f"Plotting density projection...")
+        afLogger.info("Plotting density projection...")
         plot.proj(sim.snap[snap_idx], center=center, width=(radius,"Mpc"), field=("gas","density"), save = False, show = True)
     
     return center
@@ -114,6 +125,55 @@ def faceon(sim, snap_idx, center = None, particle = None, gas = None, radius = N
     afLogger.debug(f"Calculated face-on axis {face_on}")
 
     return face_on.v.tolist()
+
+@register_derived("faceon_weighted",set_config={"center": "center_default","particle":"PartType0", "weight":"HI_mass", "radius": 10})
+def faceon_weighted(sim, snap_idx, center = None, particle = None, radius = None, weight = None):
+    afLogger.info(f"Calculating face-on axis for snapshot {snap_idx} limited by sphere of radius {radius} kpc using weighted angular momentum with weight {weight}")
+    # Selects a well centered sphere with rvir radius
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    sp = ds.sphere(center,(radius,"kpc"))
+
+    # Get angular momentum vector and normalize
+    lmom = np.array([sp.quantities.weighted_average_quantity((particle, f"specific_angular_momentum_{ax}"), (particle, weight)).to_value() for ax in ['x', 'y', 'z']])
+    face_on = lmom/np.linalg.norm(lmom)
+
+    afLogger.debug(f"Calculated face-on axis {face_on}")
+
+    return face_on.tolist()
+
+@register_derived("edgeon_weighted",set_config={"center": "center_default","particle":"PartType0", "weight":"HI_mass", "radius": 10})
+def edgeon_weighted(sim, snap_idx, center = None, particle = None, radius = None, weight = None):
+    afLogger.info(f"Calculating edge-on axis for snapshot {snap_idx} limited by sphere of radius {radius} kpc using weighted angular momentum with weight {weight}")
+    faceon = sim.get_derived("faceon_weighted", snap_idx, center=center, particle=particle, radius=radius, weight=weight)
+
+    z0 = np.array([0,0,1.0])
+    if abs(np.dot(faceon, z0)) > 0.9:
+        z0 = np.array([1.0,0,0])
+
+    edge_on = np.cross(faceon, z0)
+    edge_on /= np.linalg.norm(edge_on)
+
+    afLogger.debug(f"Calculated edge-on axis {edge_on}")
+
+    return edge_on.tolist()
+
+@register_derived("ang_mom_weighted",set_config={"center": "center_default","particle":"PartType0", "weight":"HI_mass", "radius": 10})
+def ang_mom_weighted(sim, snap_idx, center = None, particle = None, radius = None, weight = None):
+    afLogger.info(f"Calculating angular momentum for snapshot {snap_idx} limited by sphere of radius {radius} kpc using weighted angular momentum with weight {weight}")
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    sp = ds.sphere(center,(radius,"kpc"))
+
+    # Get angular momentum vector and normalize
+    offset = "particle_" if particle in ["PartType4","PartType1"] else ""
+    lmom = unyt_array([sp.quantities.weighted_average_quantity((particle, f"{offset}specific_angular_momentum_{ax}"), (particle, weight)) for ax in ['x', 'y', 'z']])
+
+    afLogger.debug(f"Calculated specific angular momentum {lmom}")
+
+    return lmom.to("km**2/s")
 
 @register_derived("ang_mom",set_config={"center": "center_default","particle":"all", "gas": True, "use_particle": False, "radius": 10, "temp":None})
 def ang_mom(sim, snap_idx, center = None, particle = None, gas = None, radius = None, use_particle = None, temp = None):
@@ -200,8 +260,8 @@ def total_in_sphere(sim, snap_idx, center = None, radius = None, field = None):
     sp = ds.sphere(center, (radius,"kpc"))
     return total_in_obj(sp, field)
 
-@register_derived("half_mass_radius", set_config={"center": "center_default", "particle": "PartType4", "radius": None})
-def half_radius(sim, snap_idx, center = None, particle = None, radius = None):
+@register_derived("half_mass_radius", set_config={"center": "center_default", "particle": "PartType4", "radius": None, "mass_field":"Masses"})
+def half_radius(sim, snap_idx, center = None, particle = None, radius = None, mass_field = None):
     # Setup sphere and calculate target half mass
     ds = sim[snap_idx]
     if isinstance(center, str):
@@ -210,10 +270,10 @@ def half_radius(sim, snap_idx, center = None, particle = None, radius = None):
         radius = sim.get_derived("virial_radius", snap_idx, center=center).to_value()
     sp = ds.sphere(center, (radius,"kpc"))
     afLogger.debug(f"Calculating half-mass radius for snapshot {snap_idx} using particle type {particle} within radius {radius}")
-    total_mass = total_in_obj(sp, (particle,"Masses")).to("Msun").v
+    total_mass = total_in_obj(sp, (particle, mass_field)).to("Msun").v
     half_mass = total_mass / 2.0
 
-    allMass    = sp[(particle,"Masses")].in_units("Msun")
+    allMass    = sp[(particle, mass_field)].in_units("Msun")
     allR       = sp[(particle,"particle_position_spherical_radius")].to("kpc")
     idx   = np.argsort(allR)
     mSort = np.array(allMass)[idx]
@@ -227,8 +287,8 @@ def half_radius(sim, snap_idx, center = None, particle = None, radius = None):
     afLogger.debug(f"Found half-mass radius: {rSort[idxAtHalf]:.3f} kpc, enclosing {cumM[idxAtHalf]:.3E} Msun, with target {half_mass:.3E} Msun")
     return rSort[idxAtHalf]*unyt.kpc
 
-@register_derived("percent_mass_radius", set_config={"center": "center_default", "particle": "PartType4", "radius": None, "percent": 0.9})
-def percent_radius(sim, snap_idx, center = None, particle = None, radius = None, percent = None):
+@register_derived("percent_mass_radius", set_config={"center": "center_default", "particle": "PartType4", "radius": None, "percent": 0.9, "mass_field":"Masses"})
+def percent_radius(sim, snap_idx, center = None, particle = None, radius = None, percent = None, mass_field = None):
     # Setup sphere and calculate target half mass
     ds = sim[snap_idx]
     if isinstance(center, str):
@@ -237,10 +297,10 @@ def percent_radius(sim, snap_idx, center = None, particle = None, radius = None,
         radius = sim.get_derived("virial_radius", snap_idx, center=center).to_value()
     sp = ds.sphere(center, (radius,"kpc"))
     afLogger.debug(f"Calculating percent-mass radius for snapshot {snap_idx} using particle type {particle} within radius {radius}")
-    total_mass = total_in_obj(sp, (particle,"Masses")).to("Msun").v
+    total_mass = total_in_obj(sp, (particle, mass_field)).to("Msun").v
     part_mass = total_mass * percent
 
-    allMass    = sp[(particle,"Masses")].in_units("Msun")
+    allMass    = sp[(particle, mass_field)].in_units("Msun")
     allR       = sp[(particle,"particle_position_spherical_radius")].to("kpc")
     idx   = np.argsort(allR)
     mSort = np.array(allMass)[idx]
@@ -254,29 +314,73 @@ def percent_radius(sim, snap_idx, center = None, particle = None, radius = None,
     afLogger.info(f"Found percent-mass radius: {rSort[idxAtHalf]:.3f} kpc, enclosing {cumM[idxAtHalf]:.3E} Msun, with target {part_mass:.3E} Msun")
     return rSort[idxAtHalf]*unyt.kpc
 
+@register_derived("percent_mass_height", set_config={"center": "center_default", "particle": "PartType4", "radius": None, "percent": 0.5, "mass_field":"Masses", "axis": "faceon", "height": None})
+def percent_height(sim, snap_idx, center = None, particle = None, radius = None, percent = None, mass_field = None, axis = None, height = None):
+    # Setup disk and calculate target half mass
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if radius is None:
+        radius = sim.get_derived("virial_radius", snap_idx, center=center).to_value()
+    if height is None:
+        height = sim.get_derived("virial_radius", snap_idx, center=center).to_value()
+    if axis is None:
+        axis = sim.get_derived("faceon", snap_idx, center=center, particle=particle, radius=radius, use_particle=False, temp=None)  
+        
+    sp = ds.disk(center, axis, (radius,"kpc"), (height, "kpc"))
+    afLogger.debug(f"Calculating percent-mass height for snapshot {snap_idx} using particle type {particle} with disk with radius {radius} and within height {height}")
+    total_mass = total_in_obj(sp, (particle, mass_field)).to("Msun").v
+    part_mass = total_mass * percent
+
+    allMass    = sp[(particle, mass_field)].in_units("Msun")
+    allZ       = np.abs(sp[(particle,"particle_position_cylindrical_z")].to("kpc").v)
+    idx   = np.argsort(allZ)
+    mSort = np.array(allMass)[idx]
+    zSort = np.array(allZ)[idx]
+    cumM  = np.cumsum(mSort)
+
+    idxAtHalf = np.argmin(np.abs(cumM - part_mass))
+    if (cumM[idxAtHalf]-part_mass)/part_mass > 0.1:
+        afLogger.warning(f"Percent-mass height determination may be inaccurate: enclosed mass at z_{percent*100:.0f} is {cumM[idxAtHalf]:.3E} Msun vs target {part_mass:.3E} Msun, difference of {(cumM[idxAtHalf]-part_mass)/part_mass:.2%}")
+
+    afLogger.info(f"Found percent-mass height: {zSort[idxAtHalf]:.3f} kpc, enclosing {cumM[idxAtHalf]:.3E} Msun, with target {part_mass:.3E} Msun")
+    return zSort[idxAtHalf]*unyt.kpc
+
+register_alias("height_e", "percent_mass_height", percent = 0.5)
+
 register_alias("radius_e_star", "half_mass_radius", particle="PartType4")
 register_alias("radius_e_gas", "half_mass_radius", particle="PartType0")
 register_alias("radius_e_dm", "half_mass_radius", particle="PartType1")
 
-@register_derived("total_mass", set_config={"particle": "all"})
-def total_mass(sim, snap_idx, particle=None):
+@register_derived("total_mass", set_config={"particle": "all", "mass_field": "Masses"})
+def total_mass(sim, snap_idx, particle=None, mass_field=None):
     ds = sim[snap_idx].all_data()
-    return total_in_obj(ds, (particle,"Masses")).to("Msun")
+    return total_in_obj(ds, (particle, mass_field)).to("Msun")
 
 register_alias("total_mass_gas", "total_mass", particle="PartType0")
 register_alias("total_mass_stars", "total_mass", particle="PartType4")
 register_alias("total_mass_dm", "total_mass", particle="PartType1")
 register_alias("total_mass_all", "total_mass", particle="all")
 
-@register_derived("mass_in_sphere", set_config={"center": "center_default", "radius": 10, "particle": "all"})
-def mass_in_sphere(sim, snap_idx, center = None, radius = None, particle=None):
+@register_derived("mass_in_sphere", set_config={"center": "center_default", "radius": 10, "particle": "all", "mass_field": "Masses"})
+def mass_in_sphere(sim, snap_idx, center = None, radius = None, particle=None, mass_field=None):
     ds = sim[snap_idx]
     if isinstance(center, str):
         center = sim.get_derived(center, snap_idx)
     if isinstance(radius, str):
         radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
     sp = ds.sphere(center, (radius,"kpc"))
-    return total_in_obj(sp, (particle,"Masses")).to("Msun")
+    return total_in_obj(sp, (particle, mass_field)).to("Msun")
+
+@register_derived("mass_in_los", set_config={"center": "center_default", "radius": 10, "particle": "all", "mass_field": "Masses", "height": 10, "axis": [0,0,1]})
+def mass_in_los(sim, snap_idx, center = None, radius = None, particle=None, mass_field=None, height = None, axis = None):
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if isinstance(radius, str):
+        radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
+    sp = ds.disk(center, axis, (radius,"kpc"), (height,"kpc"))
+    return total_in_obj(sp, (particle, mass_field)).to("Msun")
 
 register_alias("mass_200", "mass_in_sphere", radius="virial_radius")
 register_alias("mass_re", "mass_in_sphere", radius="half_mass_radius")
@@ -309,8 +413,8 @@ def v_fid(sim, snap_idx, center = None, radius = None, particle=None):
     mass = total_in_obj(sp, (particle,"Masses")).to("Msun")
     return np.sqrt( unyt.G * mass / (radius * unyt.kpc) ).to("km/s")
 
-@register_derived("v_phi", set_config={"center": "center_default", "radius": 2, "particle":"PartType0","bins":40,"axis":"faceon", "bulk_v":"bulk_v", "temp":None})
-def v_phi(sim, snap_idx, center = None, radius = None, particle=None, bins=None, axis=None, bulk_v=None, temp=None):
+@register_derived("v_phi", set_config={"center": "center_default", "radius": 2, "particle":"PartType0","bins":40,"axis":"faceon", "bulk_v":"bulk_v", "temp":None, "mass_field":"Masses"})
+def v_phi(sim, snap_idx, center = None, radius = None, particle=None, bins=None, axis=None, bulk_v=None, temp=None, mass_field=None):
     ds = sim[snap_idx]
     if isinstance(center, str):
         center = sim.get_derived(center, snap_idx)
@@ -328,12 +432,12 @@ def v_phi(sim, snap_idx, center = None, radius = None, particle=None, bins=None,
     sp.set_field_parameter("bulk_velocity", bulk_v)
     # TODO: Fix 0.2 (should be few times epsilon)
     field = (particle,"particle_velocity_cylindrical_theta")
-    profile = data.profile(sp, (particle,"particle_position_cylindrical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="km/s", bin_extrema=[(0.2,radius)], log = True, accumulate=False, weight_field=(particle,"mass")))
+    profile = data.profile(sp, (particle,"particle_position_cylindrical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="km/s", bin_extrema=[(0.2,radius)], log = True, accumulate=False, weight_field=(particle,mass_field)))
 
     return profile[field].in_units("km/s")[-1]
 
-@register_derived("v_disp", set_config={"center": "center_default", "radius": 2, "particle":"PartType0","bins":40,"axis":"faceon", "bulk_v":"bulk_v", "temp":None})
-def v_disp(sim, snap_idx, center = None, radius = None, particle=None, bins=None, axis=None, bulk_v=None, temp=None):
+@register_derived("v_disp", set_config={"center": "center_default", "radius": 2, "particle":"PartType0","bins":40,"axis":"faceon", "bulk_v":"bulk_v", "temp":None, "mass_field":"Masses"})
+def v_disp(sim, snap_idx, center = None, radius = None, particle=None, bins=None, axis=None, bulk_v=None, temp=None, mass_field=None):
     ds = sim[snap_idx]
     if isinstance(center, str):
         center = sim.get_derived(center, snap_idx)
@@ -351,7 +455,7 @@ def v_disp(sim, snap_idx, center = None, radius = None, particle=None, bins=None
     sp.set_field_parameter("bulk_velocity", bulk_v)
     # TODO: Fix 0.2 (should be few times epsilon)
     field = (particle,"particle_velocity_cylindrical_theta")
-    profile = data.profile(sp, (particle,"particle_position_cylindrical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="km/s", bin_extrema=[(0.2,radius)], log = True, accumulate=False, weight_field=(particle,"mass")))
+    profile = data.profile(sp, (particle,"particle_position_cylindrical_radius"), field, data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="km/s", bin_extrema=[(0.2,radius)], log = True, accumulate=False, weight_field=(particle,mass_field)))
     return profile.standard_deviation[field].in_units("km/s")[-1]
 
 @register_derived("min_radius", set_config={"center": "center_default", "particle":"PartType1", "N":1000, "tol":1})
@@ -435,8 +539,33 @@ def cuspyness(sim, snap_idx, center = None, radius = None, particle=None, bins=N
 
     return slope
 
-@register_derived("R_den", set_config={"center": "center_default", "radius": "virial_radius", "density_thresh": 1e1, "particle":"PartType0","bins":40,"axis":"faceon","min_N_radius":1000})
-def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, bins=None, axis=None, min_N_radius=None):
+def adaptive_bin_merging(edges, mid, counts, min_particles=50):
+    """Generalized agglomerative binning for any 1D coordinate."""
+    mid_adapt, edges_adapt, counts_adapt = [], [edges[0]], []
+    curr_cnt, curr_sum = 0, 0.0
+    
+    for i in range(len(mid)):
+        curr_cnt += counts[i]
+        curr_sum += mid[i] * counts[i]
+        if curr_cnt >= min_particles or i == len(mid) - 1:
+            mid_adapt.append(curr_sum / curr_cnt if curr_cnt > 0 else mid[i])
+            edges_adapt.append(edges[i+1])
+            counts_adapt.append(curr_cnt)
+            curr_cnt, curr_sum = 0, 0.0
+    # Warn if min particle numbers is not reached 
+    if counts_adapt[-1] < min_particles:
+        afLogger.warning(f"Outermost bin is starved! Out of desired {min_particles}, only {counts_adapt[-1]} were reached")
+        afLogger.warning(f"Full particle count per bin is: {counts_adapt}")
+    return np.array(edges_adapt), np.array(mid_adapt), np.array(counts_adapt)
+
+def build_bins(sp, ptype, field, nbins, extrema = None, log_x = False, min_particles = 50, unit = None):
+    profile = data.profile(sp, (ptype,field), (ptype,"particle_ones"), data_args=settings.DataConfig(n_bins=nbins, bin_extrema=extrema, log = log_x, accumulate=False, weight_field=None, x_unit = unit))
+    amount_of_p = profile[(ptype,"particle_ones")].v
+    edge, mid, _ = adaptive_bin_merging(profile.x_bins.v, profile.x.v, amount_of_p, min_particles = min_particles)
+    return {"set_bins": [edge], "x_data": unyt_array(mid, profile.x.units)}
+
+@register_derived("R_den", set_config={"center": "center_default", "radius": "virial_radius", "density_thresh": 1e1, "particle":"PartType0","bins":40,"axis":"faceon","min_N_radius":1000, "mass_field":"Masses", "adaptive": True, "min_particles": 75})
+def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, bins=None, axis=None, min_N_radius=None, mass_field = None, adaptive = None, min_particles = None):
     ds = sim[snap_idx]
     if isinstance(center, str):
         center = sim.get_derived(center, snap_idx)
@@ -450,9 +579,13 @@ def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, pa
 
     min_rad = sim.get_derived("min_radius", snap_idx, center=center, particle="all", N=min_N_radius, tol=50).to_value() # kpc
 
-    profile = data.profile(sp, bin_fields=(particle,"particle_position_cylindrical_radius"), field=(particle,"Masses"), data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/pc**2",  bin_extrema=[(min_rad,radius)], accumulate=False, postprocess="circular_surface", log = True))
+    extra_kwargs = {}
+    if adaptive:
+        extra_kwargs = build_bins(sp, particle, "particle_position_cylindrical_radius", bins, extrema=[(min_rad,radius)], log_x=True, min_particles=min_particles, unit="kpc")
+
+    profile = data.profile(sp, bin_fields=(particle,"particle_position_cylindrical_radius"), field=(particle,mass_field), data_args=settings.DataConfig(n_bins=bins,x_unit="kpc",unit="Msun/pc**2",  bin_extrema=[(min_rad,radius)], accumulate=False, postprocess="circular_surface", log = True, **extra_kwargs))
     
-    sigma = postpro_fn.get("circular_surface")(profile,(particle,"Masses")).in_units("Msun/pc**2").v
+    sigma = postpro_fn.get("circular_surface")(profile,(particle,mass_field)).in_units("Msun/pc**2").v
     r = profile.x.in_units("kpc").v
 
     valid = (sigma > 0) & (r > 0)
@@ -484,8 +617,8 @@ def R_den(sim, snap_idx, center = None, density_thresh = None, radius = None, pa
         return 0
     return float(valid_solutions.max())*unyt.kpc
 
-@register_derived("principal_axes", set_config={"center": "center_default", "radius": "virial_radius", "particle":"PartType0", "initial_q": 1, "initial_s": 1, "max_it": 20, "tol": 1e-3})
-def principal_axes(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, initial_q = None, initial_s = None, max_it = None, tol = None):
+@register_derived("principal_axes", set_config={"center": "center_default", "radius": "virial_radius", "particle":"PartType0", "initial_q": 1, "initial_s": 1, "max_it": 20, "tol": 1e-3, "mass_field":"Masses"})
+def principal_axes(sim, snap_idx, center = None, density_thresh = None, radius = None, particle=None, initial_q = None, initial_s = None, max_it = None, tol = None, mass_field = None):
     ds = sim[snap_idx]
     if isinstance(center, str):
         center = sim.get_derived(center, snap_idx)
@@ -500,7 +633,7 @@ def principal_axes(sim, snap_idx, center = None, density_thresh = None, radius =
         sp.set_field_parameter("q", q)
         sp.set_field_parameter("s", s)
         
-        w = (particle, "particle_mass")
+        w = (particle, mass_field)
         Sxx = sp.quantities.weighted_average_quantity((particle, "s_xx"), weight=w).to_value()
         Syy = sp.quantities.weighted_average_quantity((particle, "s_yy"), weight=w).to_value()
         Szz = sp.quantities.weighted_average_quantity((particle, "s_zz"), weight=w).to_value()
@@ -513,7 +646,10 @@ def principal_axes(sim, snap_idx, center = None, density_thresh = None, radius =
                     [Sxz, Syz, Szz]], dtype=float)
 
         # eigvals sorted
-        lam = np.sort(np.linalg.eigvalsh(M))[::-1]
+        lam, eigv = np.linalg.eigh(M)
+        sorted_idx = np.argsort(lam)[::-1]
+        lam = lam[sorted_idx]
+        eigv = eigv[:, sorted_idx]
         A, B, C = np.sqrt(lam)   # proportional axis lengths
         q_new = B / A
         s_new = C / A
@@ -525,7 +661,7 @@ def principal_axes(sim, snap_idx, center = None, density_thresh = None, radius =
             break
         q, s = q_new, s_new
 
-    return (A,B,C)
+    return (A,B,C, eigv[:,0].tolist(), eigv[:,1].tolist(), eigv[:,2].tolist())
 
 def _inertia_tensor_spectra(pos, mass):
     """Calculates eigenvalues and eigenvectors for the inertia tensor for a given list of masses and positions"""
@@ -536,8 +672,8 @@ def _inertia_tensor_spectra(pos, mass):
 
     return np.linalg.eigh(I_tensor)
 
-@register_derived("shape_ceverino", set_config={"radius": 2.0, "particle": "PartType4", "n_neighbors": 80, "max_iter": 10, "shell_dr":0.1})
-def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_neighbors=None, max_iter=None, shell_dr = None):
+@register_derived("shape_ceverino", set_config={"radius": 2.0, "particle": "PartType4", "n_neighbors": 80, "max_iter": 10, "shell_dr":0.1, "mass_field":"Masses"})
+def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_neighbors=None, max_iter=None, shell_dr = None, mass_field=None):
     from scipy.spatial import cKDTree
     """
     Implements the Ceverino et al. (2015) 3D Isodensity Shape Fitting algorithm.
@@ -551,10 +687,10 @@ def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_nei
     # We grab a sphere 2x the target radius to ensure we capture all the particles (and neighbours)
     sp = ds.sphere(center, (radius * 2, "kpc"))
     pos = sp[(particle, "relative_particle_position")].to("kpc").v
-    masses = sp[(particle, "Masses")].to("Msun").v
+    masses = sp[(particle, mass_field)].to("Msun").v
 
     if len(pos) < n_neighbors * 2:
-        afLogger.warning(f"Not enough particles to compute shape at r={radius} kpc.")
+        afLogger.warning(f"Not enough particles to compute shape at r={radius} kpc. N = {len(pos)}, required at least {n_neighbors*2}. Returning default spherical shape.")
         return (1, 1, 1, [1,0,0], [0,1,0], [0,0,1])
 
     # Local Density Calculation (80 nearest neighbors)
@@ -572,7 +708,7 @@ def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_nei
     particle_rad = np.linalg.norm(pos, axis=1)
     shell_mask = (particle_rad > radius - dr) & (particle_rad < radius + dr)
     if np.sum(shell_mask) < 10:
-        afLogger.warning(f"Initial shell has too few particles: N = {np.sum(shell_mask)}")
+        afLogger.warning(f"Initial shell has too few particles: N = {np.sum(shell_mask)}, required at least 10")
     p_shell = pos[shell_mask]
     m_shell = masses[shell_mask]
     evals, evecs = _inertia_tensor_spectra(p_shell, m_shell)
@@ -583,6 +719,7 @@ def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_nei
     a = np.sqrt(np.abs(1.5 * (e3 + e2 - e1)))
     b = np.sqrt(np.abs(1.5 * (e3 + e1 - e2)))
     c = np.sqrt(np.abs(1.5 * (e2 + e1 - e3)))
+    v = evecs
     afLogger.info(f"Shape at iteration 0: b/a={b/a:.3f}, c/a={c/a:.3f}, a = {a:.3f}, b = {b:.3f}, c = {c:.3f}")
     # Iterative Isodensity Fitting
     for iteration in range(max_iter):
@@ -595,7 +732,8 @@ def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_nei
         rho_1 = local_rho[idx_1]
         rho_2 = local_rho[idx_2]
         rho_s = (rho_1 + rho_2) / 2.0
-        sigma_s = max(np.abs(rho_1 - rho_2) / 2.0, 0.1 * rho_s) # Use at least 10 percent if sigma is tiny
+        sigma_s = max(np.abs(rho_1 - rho_2) / 2.0,0)# 0.1 * rho_s) # Use at least 10 percent if sigma is tiny
+        afLogger.info(f"Iteration {iteration+1}: rho_1={rho_1:.3e}, rho_2={rho_2:.3e}, rho_s={rho_s:.3e}, sigma_s={sigma_s:.3e}, true_sigma={np.abs(rho_1 - rho_2) / 2.0:.3e}")
         # Isolate the isodensity shell
         iso_mask = (local_rho > (rho_s - sigma_s)) & (local_rho < (rho_s + sigma_s))
         if np.sum(iso_mask) < 10:
@@ -607,8 +745,7 @@ def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_nei
         e, v = _inertia_tensor_spectra(p_iso, m_iso)
         sort_idx = np.argsort(e) # Sort eigenvalues: e[0] < e[1] < e[2]
         e1, e2, e3 = e[sort_idx]
-        # Calculate Routh (2013) axes lengths for a thin ellipsoidal shell
-        # Use abs() to prevent sqrt of negative numbers due to precision errors on very spherical halos
+        # Calculate Routh (2013) axes lengths for a thin ellipsoidal shell. Use abs() to prevent sqrt of negative numbers due to precision errors on very spherical halos
         a = np.sqrt(np.abs(1.5 * (e3 + e2 - e1)))
         b = np.sqrt(np.abs(1.5 * (e3 + e1 - e2)))
         c = np.sqrt(np.abs(1.5 * (e2 + e1 - e3)))
@@ -622,7 +759,7 @@ def shape_ceverino(sim, snap_idx, center=None, radius=None, particle=None, n_nei
         major_axis = new_major_axis
 
     afLogger.info(f"Shape at r={radius:.2f} kpc: b/a={b/a:.3f}, c/a={c/a:.3f}")    
-    return (a, b, c, v[sort_idx[0]].tolist(), v[sort_idx[1]].tolist(), v[sort_idx[2]].tolist())
+    return (a, b, c, v[:, sort_idx[0]].tolist(), v[:, sort_idx[1]].tolist(), v[:, sort_idx[2]].tolist())
 
 @register_derived("sfr_young_star", set_config={"center": "center_default", "radius": "virial_radius", "max_age": 20, "cosmology": [0.702,0.272,0.728,0.0]})
 def sfr_young_star(sim, snap_idx, center=None, radius=None, max_age=None, cosmology=None):
@@ -645,6 +782,18 @@ def sfr_young_star(sim, snap_idx, center=None, radius=None, max_age=None, cosmol
     youngMass = np.sum(allStarMass[youngMask])
     sfr = youngMass /(max_age * 1e6)
     return (sfr * unyt.Msun / unyt.yr).to("Msun/yr")
+
+@register_derived("instant_sfr", set_config={"center": "center_default", "radius": "virial_radius", "particle":"PartType0"})
+def instant_sfr(sim, snap_idx, center=None, radius=None, particle=None):
+    ds = sim[snap_idx]
+    if isinstance(center, str):
+        center = sim.get_derived(center, snap_idx)
+    if isinstance(radius, str):
+        radius = sim.get_derived(radius, snap_idx, center=center).to("kpc").to_value()
+    # Prepare sphere and cosmology
+    sp = ds.sphere(center, (radius,"kpc"))
+    sfr = sp[(particle, "StarFormationRate")].to("Msun/yr").sum()
+    return sfr
 
 # TODO: Everything halo related should be reworked at some point to an specific halo analysis module, these are just quick workarounds to get some basic halo properties for the TFG, but ideally you would have a more general halo finding and analysis module that can be used for different halo finders and has more properties (also ideally with some caching and ability to use pre-computed halo catalogs from disk, etc) 
 
